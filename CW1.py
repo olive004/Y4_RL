@@ -810,7 +810,61 @@ class MC_World(NewGridWorld):
 
         self.des_action_tracker = [0, 0]    # Keep track of how often desired action gets chosen
 
-    def mc_iterative_optimisation(self, discount=0.45, epsilon_init=0.1, n=5, alpha=0.001, V_optimal=None, decay_alpha=False, batch=10):
+    # REWRITE
+    def mc_iterative_optimisationL(self, discount=0.55, epsilon_init=0.1, n=200, alpha=0.4, V_optimal=None, decay_alpha=False, decay_eps=True, batch=1):
+
+        Q = np.random.rand(self.state_size, self.action_size)
+        policy = self.get_epsilon_greedy_policy(Q, epsilon_init)
+        epsilon = epsilon_init
+        returns_history = []
+        all_rmse = []
+
+        for i in range(n):
+            trace = self.run_episode(policy, epsilon)
+
+        total_rewards = []
+        mean_rewards = []
+        all_rmse = []
+
+        Q = np.zeros((self.state_size, self.action_size))
+        epsilon = epsilon_init
+
+        for k in range(n):
+            trace = self.run_episode(policy, epsilon)
+            current_state = self.get_random_start()
+            desired_action = self.choose_desired_action(current_state, Q, epsilon)
+
+            total_reward = []
+            while not(self.absorbing[0, current_state]):
+                action = self.choose_action(current_state, desired_action)
+
+                post_state, reward = self.take_step(current_state, action)
+                post_des_action = self.choose_desired_action(post_state, Q, epsilon)
+                post_action = self.choose_action(post_state, post_des_action)
+
+                Q[current_state, action] += alpha * (reward + discount * Q[post_state, post_action] - Q[current_state, action])
+
+                current_state, desired_action = post_state, post_action
+                total_reward.append(reward)
+
+            epsilon = 1 / (k+1)
+
+            # Record rewards
+            total_rewards.append(np.sum(total_reward))
+            mean_rewards.append(np.average(self.get_discounted_rewards(total_reward, discount)))
+            if np.any(V_optimal):   # Root Mean Square Error
+                policy = self.get_greedy_policy(Q)
+                V = self.get_optimal_value(Q, policy)
+                rmse = self.get_rmse(V, V_optimal)
+                all_rmse.append(rmse)
+
+        Policy_sarsa = self.get_epsilon_greedy_policy(Q, epsilon)
+        V_sarsa = self.get_optimal_value(Q, Policy_sarsa)
+
+        return Policy_sarsa, V_sarsa, total_rewards, mean_rewards, all_rmse
+    # /REWRITE
+
+    def mc_iterative_optimisation(self, discount=0.45, epsilon_init=0.1, n=5, alpha=0.001, V_optimal=None, decay_alpha=False, decay_eps=True, batch=1):
         """ MC Iterative Learning to Control """
         # Q = np.zeros((self.state_size, self.action_size))
         Q = np.random.rand(self.state_size, self.action_size)
@@ -818,65 +872,88 @@ class MC_World(NewGridWorld):
 
         # Trackers
         total_rewards = []
+        mean_rewards = []
         returns = []
         all_rmse = []
         epsilon = epsilon_init
+        
         for run in range(n):
             trace = self.run_episode(policy, epsilon)
             rewards_forward = [r[2] for r in trace]
-            # rewards_reverse = rewards_forward[::-1]
+            rewards_reverse = rewards_forward[::-1]
 
-            total_reward = []
             state_a_tracker = np.zeros((self.state_size, self.action_size))
-            # state_a_tracker = np.zeros(self.state_size)
-            G = 0
-            for i, (state, action, R) in enumerate(trace[::-1]):
 
-                reward_idx = self.get_occurence_idx(trace, state, action)
-                if self.use_first_visit:
-                    # reward_idx = reward_idx[0]
-                    if reward_idx==None:
-                        # Use current index if first index not found
-                        reward_idx = (len(trace)-1) - i
+            # Rewrite
+            for i, (state, action, R) in enumerate(trace):
+                G = 0 
+                Rt = 0
+                if (not state_a_tracker[state, action]) and self.use_first_visit:
+                    state_a_tracker[state, action] += 1
+                    G = self.get_discounted_rewards(rewards_forward[i::], discount)
+                    G = np.sum(G)
+                    for _, _, rev_R in reversed(trace[i::]):
+                        Rt = discount*Rt + rev_R
+
+                    if decay_alpha:
+                        alpha = 1 / state_a_tracker[state, action]
+                    
+                    Q[state, action] += alpha * (G - Q[state, action])
+            # /Rewrite
+
+
+            # total_reward = []
+            # # local_sa_tracker = np.zeros((self.state_size, self.action_size))
+            # G = 0
+            # for i, (state, action, R) in enumerate(trace[::-1]):
+            #     if (not state_a_tracker[state, action]) and self.use_first_visit:
+            #         # local_sa_tracker[state, action] += 1
+            #         state_a_tracker[state, action] += 1
+
+            #     # Find the points in the trace with this (s, a)
+            #     reward_idx = self.get_occurence_idx(trace, state, action)
+            #     if reward_idx==None:
+            #         # Use current index if first index not found
+            #         reward_idx = [(len(trace)-1) - i]
+
+            #     # Calculate first-visit or every-visit returns 
+            #     G = rewards_forward[reward_idx[0]:]
+            #     G = np.sum(self.get_discounted_rewards(G, discount))
+            #     total_reward.append(G)
+            #     Rt = G / state_a_tracker[state, action]
                 
-                state_a_tracker[state, action] += 1
-                if decay_alpha:
-                    alpha = 1 / state_a_tracker[state, action]
-                
-                if (type(reward_idx)==int):
-                    R = rewards_forward[reward_idx]
-                else:
-                    R = [rewards_forward[rew_i] for rew_i in reward_idx]
-                    # R = rewards_forward[reward_idx[0]:]
-                    R = self.get_discounted_rewards(R, discount)
-                    R = np.sum(R)
+            #     if decay_alpha:
+            #         alpha = 1 / state_a_tracker[state, action]
 
-                # G = G * discount + R
+            #     # G = G * discount + R
 
-                total_reward.append(R)
-
-                Q[state, action] += alpha * (R - Q[state, action])
+            #     Q[state, action] += alpha * (Rt - Q[state, action])
             
+            if (run % batch) == 0:
+                policy = self.get_epsilon_greedy_policy(Q, epsilon)
+            if decay_eps:
+                epsilon = 1 / (i+1)
+
             # Record rewards
+            total_reward = 0
+            for s, a, R in trace:
+                total_reward = discount*total_reward + R
+            # total_reward = self.get_discounted_rewards(rewards_reverse, discount)
             total_rewards.append(np.sum(total_reward))
-            # mean_rewards.append(np.average(total_reward))
-            returns.append(np.sum(self.get_discounted_rewards(total_reward[::-1], discount)))
+            mean_rewards.append(np.average(total_reward))
+            # returns.append(np.sum(self.get_discounted_rewards(total_reward[::-1], discount)))
             if np.any(V_optimal):   # Root Mean Square Error
                 # V = self.get_optimal_value(Q, policy)
                 # TODO: Changing V calculation
                 V = np.max(Q, axis=1)
                 rmse = self.get_rmse(V, V_optimal)
                 all_rmse.append(rmse)
-
-            epsilon = 1 / (i+1)
-            if (run % batch) == 0:
-                policy = self.get_epsilon_greedy_policy(Q, epsilon)
         
         # Value function
         V = self.get_optimal_value(Q, policy)
 
         # policy = self.get_greedy_policy(Q)
-        return policy, V, total_rewards, returns, all_rmse
+        return policy, V, total_rewards, mean_rewards, all_rmse
 
     # def mc_batch_optimisation(self, discount=0.45, epsilon_init=0.1, batch=1, n=5, total_runs=10, alpha=0.001, V_optimal=None):
     #     """ MC Batch Learning to Control """
@@ -1187,14 +1264,14 @@ class MC_World(NewGridWorld):
 p = 0.45  
 gamma = 0.55
 epsilon_init = 0.01
-alpha = 0.1
+alpha = 0.01
 
 use_first_visit=True
 visit_text = '(First-visit)' if use_first_visit else '(Every-visit)'
 # decay_alpha = True
 batch = 15
-n = 3000
-total_runs=5
+n = 9000
+total_runs=1
 
 
 world = MC_World(absorbing_locs, special_rewards, p, use_first_visit=use_first_visit)
@@ -1207,15 +1284,18 @@ dp_world.draw_value(V_optimal, title=r'DP: Optimal Value for Grid World, $\gamma
 
 # MC
 all_rmse_mc = []
+all_total_rewards_mc = []
 for i in range(total_runs):
     policy_mc, V_mc, total_rewards_mc, returns_mc, rmse_mc = world.mc_iterative_optimisation(discount=gamma, epsilon_init=epsilon_init, n=n, alpha=alpha, V_optimal=V_optimal)
     all_rmse_mc.append(rmse_mc)
+    all_total_rewards_mc.append(total_rewards_mc)
 # policy, V, total_rewards, returns, rmse = world.mc_batch_optimisation(discount=gamma, epsilon_init=epsilon_init, n=n, alpha=alpha, V_optimal=V_optimal)
 print('Average RMSE MC')
-world.draw_learning_curve(all_rmse_mc, title_text='MC: RMSE, {} repeats {}'.format(total_runs, visit_text), axislabels=('Episodes', 'RMSE'))
+world.draw_learning_curve(all_rmse_mc, title_text=r'MC: RMSE, {} repeats {} $\alpha$={} $\epsilon$={}'.format(total_runs, visit_text, alpha, epsilon_init), axislabels=('Episodes', 'RMSE'))
+world.draw_learning_curve(all_total_rewards_mc, title_text=r'MC: Total Discounted Returns, {} repeats {} $\alpha$={} $\epsilon$={}'.format(total_runs, visit_text, alpha, epsilon_init), axislabels=('Episodes', 'RMSE'))
 
 print('Drawing policy grid')
-world.draw_stochastic_policy(policy_mc, V_mc)
+world.draw_stochastic_policy(policy_mc, V_mc, title=r'MC: Policy {} $\alpha$={} $\epsilon$={}'.format(visit_text, alpha, epsilon_init))
 
 print('Drawing value grid')
 world.draw_value(V_mc, title=r'MC: Value for Grid World, $\alpha$={} $\epsilon$={}'.format(alpha, epsilon_init))
