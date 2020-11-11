@@ -7,6 +7,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+import time
+
+full_start_time = time.time()
 
 
 cid = 1349379
@@ -140,19 +143,54 @@ class NewGridWorld():
     # DRAW
 
     ############# PLOTTING AND DRAWING #############
-    def draw_learning_curve_together(self, all_curves, title_text='', labels=[], repeats=False, new_fig=False):
+    def draw_learningcurve_repvars(self, all_curves, title_text='', var_labels=[], axislabels=('Episodes', 'Mean return'), new_fig=False, save=None):
+        """ Plot different curves on the same plot with repeats.
+        all_curve[var, rep, curve_values] """
+        
+        if not new_fig:
+            plt.figure()
+        for var_num, var_curves in enumerate(all_curves):
+            if new_fig:
+                plt.figure()
+            mean_curve = np.average(var_curves, axis=0)
+            std_curve = np.std(var_curves, axis=0) 
+
+            label = var_labels[var_num]
+            
+            plt.plot(mean_curve, label=label)
+            plt.fill_between(list(range(len(mean_curve))), (mean_curve - std_curve), (mean_curve + std_curve), alpha=0.6)
+        
+            plt.title(title_text)
+            plt.xlabel(axislabels[0])
+            plt.ylabel(axislabels[1])
+            if new_fig:
+                plt.legend(loc="lower left")
+
+        if not new_fig:
+            plt.legend(loc="lower left")
+
+        if save:
+            plt.savefig(save)
+        # plt.show()
+
+    def draw_learning_curve_together(self, all_curves, title_text='', labels=[], repeats=False, new_fig=False, multiple_curves=False, save=None):
         """ Plot multiple learning curves on same plot """
         plt.figure()
-        for i, curves in enumerate(all_curves):
-            label = labels[i] if labels else None
-            title_text = (title_text+label) if title_text else ''
-            self.draw_learning_curve(curves, title_text=title_text, label=label, new_fig=new_fig, repeats=repeats)
+        num_separate_curves = len(all_curves) if multiple_curves else 1
+        for c in range(num_separate_curves):
+            some_curves = all_curves[c] if num_separate_curves>1 else all_curves
+            for i, curves in enumerate(some_curves):
+                label = labels[i] if labels else None
+                # title_text = title_text+label if title_text else ''
+                self.draw_learning_curve(curves, title_text=title_text, label=label, new_fig=new_fig, repeats=repeats)
         plt.title(title_text)
         plt.xlabel('Episodes')
         plt.ylabel('Mean discounted rewards')
-        plt.show()
+        if save:
+            plt.savefig(save)
+        # plt.show()
 
-    def draw_learning_curve(self, all_mean_rewards, title_text='', label='', new_fig=True, repeats=True, axislabels=('Episodes','Mean discounted rewards')):
+    def draw_learning_curve(self, all_mean_rewards, title_text='', label='', new_fig=True, repeats=True, axislabels=('Episodes','Mean discounted rewards'), save=None):
         """ Draw the rewards collected per episode """
         mean_mean_rewards = np.average(all_mean_rewards, axis=0) if repeats else all_mean_rewards 
         std_mean_rewards = np.std(all_mean_rewards, axis=0) if repeats else 0
@@ -165,18 +203,24 @@ class NewGridWorld():
         if repeats:
             plt.fill_between(list(range(len(mean_mean_rewards))), (mean_mean_rewards - std_mean_rewards), (mean_mean_rewards + std_mean_rewards), alpha=0.6)
         if new_fig:
-            plt.show()
+            if save:
+                plt.savefig(save)
+            # plt.show()
 
-    def draw_deterministic_policy(self, Policy):
+    def draw_deterministic_policy(self, Policy, V=None, title='Policy grid', save=None):
         # Draw a deterministic policy
         # The policy needs to be a np array of 22 values between 0 and 3 with
         # 0 -> N, 1->E, 2->S, 3->W
         plt.figure()
         
-        plt.imshow(self.walls+self.rewarders +self.absorbers, cmap=cm.RdYlBu_r)
+        walls, absorbers, rewarders, value_states = self.get_world_vars_plotting(V)
+        plt.imshow(walls + absorbers + value_states + rewarders, cmap=cm.RdYlBu_r)
         # plt.hold('on')
         for state, action in enumerate(Policy):
             if(self.absorbing[0,state]):
+                policy_text = 'Absorbing'
+                location = self.locs[state]
+                plt.text(location[1], location[0], policy_text, ha='center', va='center')
                 continue
             arrows = [r"$\uparrow$",r"$\rightarrow$", r"$\downarrow$", r"$\leftarrow$"]
             action = np.argmax(Policy[state, :])
@@ -186,14 +230,16 @@ class NewGridWorld():
             location = self.locs[state]
             plt.text(location[1], location[0], action_arrow, ha='center', va='center')
             plt.title(title)
-    
-        plt.show()
 
-    def draw_stochastic_policy(self, Policy, V=None, title='Policy for Grid World'):
+        if save:
+            plt.savefig(save)
+        # plt.show()
+
+    def draw_stochastic_policy(self, Policy, V=None, title='Policy for Grid World', save=None):
         # Draw a stochastic policy
         # The policy needs to be a np array of 22 values between 0 and 3 with
         # 0 -> N, 1->E, 2->S, 3->W
-        plt.figure(figsize=(18,8))  # 
+        plt.figure(figsize=(12,8))  # 
 
         walls, absorbers, rewarders, value_states = self.get_world_vars_plotting(V)
         plt.imshow(walls + absorbers + value_states + rewarders, cmap=cm.RdYlBu_r)  # Spectral_r coolwarm
@@ -220,7 +266,9 @@ class NewGridWorld():
         
         plt.title(title)
         plt.colorbar()
-        plt.show()
+        if save:
+            plt.savefig(save)
+        # plt.show()
 
     def draw_stochastic_policy_grid(self, Policies, Values, titles, n_columns, n_lines):
         # Draw grid of policies
@@ -254,7 +302,7 @@ class NewGridWorld():
                 plt.colorbar()
             ax.title.set_text(titles[subplot]) # Set the title for the graoh given as argument
 
-        plt.show()
+        # plt.show()
 
     def get_world_vars_plotting(self, V):
         """ Helper var for making walls etc. look good """
@@ -289,13 +337,15 @@ class NewGridWorld():
         grid_elements[np.nonzero(grid_elements)] = np.nan
         return grid_elements
 
-    def draw_value(self, Value, title='Value for Grid World'):
+    def draw_value(self, Value, title='Value for Grid World', save=None):
         # Draw a policy value function
         value_states = self.get_value_state_grid(Value)
         
         plt.figure()
         walls, absorbers, rewarders, value_states = self.get_world_vars_plotting(Value)
-        plt.imshow(walls +absorbers +rewarders +value_states, cmap=cm.RdYlBu_r)  # Create the graph of the grid (leave +self.rewarders)
+        vmin=np.min(Value)
+        vmax=np.max(Value)
+        plt.imshow(walls +absorbers +rewarders +value_states, cmap=cm.RdYlBu_r, vmin=vmin, vmax=vmax)  # Create the graph of the grid (leave +self.rewarders)
         for state, value in enumerate(Value):
             if(self.absorbing[0,state]): # If it is an absorbing state, don't plot any value
                 continue
@@ -304,7 +354,9 @@ class NewGridWorld():
     
         plt.title(title)
         plt.colorbar()
-        plt.show()
+        if save:
+            plt.savefig(save)
+        # plt.show()
 
     def draw_delta_history(self):
         # Draw the progression of deltas with each epoch
@@ -314,9 +366,9 @@ class NewGridWorld():
         plt.title('Value convergence')
         plt.xlabel('Epoch')
         plt.ylabel('Delta')
-        plt.show()
+        # plt.show()
 
-    def draw_rewards(self, reward_episode_tracking, use_first_visit=True):
+    def draw_rewards(self, reward_episode_tracking, use_first_visit=True, save=None):
         # Plot the mean total rewards per episode vs. episodes
         fig = plt.figure()
 
@@ -326,16 +378,24 @@ class NewGridWorld():
         plt.title('Mean rewards collected per episode {}'.format(visit_type))
         plt.xlabel('Episode')
         plt.ylabel('Mean Reward')
-        plt.show()
+        if save:
+            plt.savefig(save)
+        # plt.show()
 
-    def draw_deterministic_policy_grid(self, Policy, titles, n_columns, n_lines):
+    def draw_deterministic_policy_grid(self, Policy, Values, titles, n_columns, n_lines, save=None):
         # Draw a grid of deterministic policy
-        # The policy needs to be an arrya of np array of 22 values between 0 and 3 with
         # 0 -> N, 1->E, 2->S, 3->W
-        plt.figure(figsize=(20,8))
+        plt.figure(figsize=(12,12))
+        walls, absorbers, rewarders, value_states = self.get_world_vars_plotting(Values[0])
+        vmin=np.min(Values)
+        vmax=np.max(Values)
+        im = plt.imshow(walls +absorbers +rewarders +value_states, cmap=cm.RdYlBu_r, vmin=vmin, vmax=vmax)
         for subplot in range (len(Policy)): # Go through all policies
             ax = plt.subplot(n_columns, n_lines, subplot+1) # Create a subplot for each policy
-            ax.imshow(self.walls+self.rewarders +self.absorbers, cmap=cm.RdYlBu_r) # Create the graph of the grid
+            PCM=ax.get_children()[2] #get the mappable, the 1st and the 2nd are the x and y axes
+            Value = Values[subplot]
+            walls, absorbers, rewarders, value_states = self.get_world_vars_plotting(Value)
+            ax.imshow(walls +absorbers +rewarders +value_states, cmap=cm.RdYlBu_r, vmin=vmin, vmax=vmax)
             for state, action in enumerate(Policy[subplot]):
                 if(self.absorbing[0,state]): # If it is an absorbing state, don't plot any action
                     continue
@@ -346,23 +406,33 @@ class NewGridWorld():
                 location = self.locs[state] # Compute its location on graph
                 plt.text(location[1], location[0], action_arrow, ha='center', va='center') # Place it on graph
             ax.title.set_text(titles[subplot]) # Set the title for the graoh given as argument
-        plt.show()
+            plt.colorbar(im, ax=ax)
+        if save:
+            plt.savefig(save)
+        # plt.show()
 
-    def draw_value_grid(self, Value, titles, n_columns, n_lines):
+    def draw_value_grid(self, Value, titles, n_columns, n_lines, save=None):
         # Draw a grid of value function
-        # The value need to be an array of np array of 22 values 
-        plt.figure(figsize=(20,8))
+        plt.figure(figsize=(12,12))
+        walls, absorbers, rewarders, value_states = self.get_world_vars_plotting(Value[0])
+        vmin=np.min(Value)
+        vmax=np.max(Value)
+        im = plt.imshow(walls +absorbers +rewarders +value_states, cmap=cm.RdYlBu_r, vmin=vmin, vmax=vmax)
         for subplot in range (len(Value)): # Go through all values
-          ax = plt.subplot(n_columns, n_lines, subplot+1) # Create a subplot for each value
-          ax.imshow(self.walls+self.rewarders +self.absorbers, cmap=cm.RdYlBu_r) # Create the graph of the grid
-          for state, value in enumerate(Value[subplot]):
-              if(self.absorbing[0,state]): # If it is an absorbing state, don't plot any value
-                  continue
-              location = self.locs[state] # Compute the value location on graph
-              plt.text(location[1], location[0], round(value,1), ha='center', va='center') # Place it on graph
-          ax.title.set_text(titles[subplot]) # Set the title for the graoh given as argument
-        plt.show()
-        
+            ax = plt.subplot(n_columns, n_lines, subplot+1) # Create a subplot for each value
+            walls, absorbers, rewarders, value_states = self.get_world_vars_plotting(Value[subplot])
+            ax.imshow(walls +absorbers +rewarders +value_states, cmap=cm.RdYlBu_r, vmin=vmin, vmax=vmax)
+            for state, value in enumerate(Value[subplot]):
+                if(self.absorbing[0,state]): # If it is an absorbing state, don't plot any value
+                    continue
+                location = self.locs[state] # Compute the value location on graph
+                plt.text(location[1], location[0], round(value,1), ha='center', va='center') # Place it on graph
+            ax.title.set_text(titles[subplot]) # Set the title for the graoh given as argument
+            plt.colorbar(im, ax=ax)
+        if save:
+            plt.savefig(save)
+        # plt.show()
+
 
     ##########################
 
@@ -414,7 +484,7 @@ class NewGridWorld():
                         T[post_state,prior_state,action] = self_prob
                     else:
                         T[post_state,prior_state,action] = neighbor_prob
-    
+
         # Build the reward matrix
         R = self.default_reward*np.ones((S,S,self.action_size))
         for i, sr in enumerate(self.special_rewards):
@@ -641,7 +711,7 @@ class DP_Policy(NewGridWorld):
 
             epochs.append(epochs[-1] + epochs_eval)
             returns.append(np.sum(V))
-            print('Iteration Epochs:', epochs[-1])
+            # print('Iteration Epochs:', epochs[-1])
 
             # Policy iteration
             for state_idx in range(policy.shape[0]):
@@ -672,10 +742,7 @@ class DP_Policy(NewGridWorld):
             # Ln.set_xdata(epochs)
             # plt.pause(1)
 
-        self.draw_value(V)
-        self.draw_deterministic_policy(policy)
-
-        return V, policy, epochs
+        return policy, V, epochs
 
 
     def policy_evaluation(self, policy, threshold, discount):
@@ -764,26 +831,39 @@ special_rewards = [reward_state_rew[1], penalty_state_rew[1]]
 
 # p = 1
 
-# world = DP_Policy(absorbing_locs=absorbing_locs, special_rewards=special_rewards, p_transition=p)
+dp_world = DP_Policy(absorbing_locs=absorbing_locs, special_rewards=special_rewards, p_transition=p)
 
 # Compute optimal value function
-# Policy = np.zeros((world.state_size, world.action_size))
+Policy = np.zeros((dp_world.state_size, dp_world.action_size))
 
-# V, Policy, epochs = world.policy_iteration(Policy, discount=gamma, threshold=threshold)
-# optimal_policy, epochs = world.value_iteration(discount=gamma, threshold=threshold)
+policy_opt_DPpit, V_optimal_DPpit, epochs_DPpit = dp_world.policy_iteration(Policy, discount=gamma, threshold=threshold)
+policy_opt_DPvit, V_optimal_DPvit, epochs_DPvit = dp_world.value_iteration(gamma, threshold)
 
-# world.draw_deterministic_policy(Policy)
-# world.draw_deterministic_policy(optimal_policy)
-# # Plot of optimal value function returns
+# dp_world.draw_stochastic_policy(policy_opt_DPpit, V_optimal_DPpit, title=r'DP: Policy iteration, $\gamma$={} threshold={}'.format(gamma, threshold), save='DP_pit_policy-world.png')
+# dp_world.draw_stochastic_policy(policy_opt_DPvit, V_optimal_DPvit, title=r'DP: Value iteration, $\gamma$={} threshold={}'.format(gamma, threshold), save='DP_vit_policy-world.png')
 
-# if np.all(optimal_policy == Policy):
-#     print("The policy iteration and value iteration both reached the same optimal policy.")
+if np.all(policy_opt_DPpit == policy_opt_DPvit):
+    print("The policy iteration and value iteration both reached the same optimal policy.")
 
+print('\n2.b.4 Observe change of p and gamma')
+start_time = time.time()
+p_collection = [0.1, 0.25, 0.5] 
+gamma_collection = [0.3, 0.5, 0.7]
+Ps = p_collection * len(gamma_collection)
+gammas = np.sort(gamma_collection * len(p_collection))
+policies_dp = []
+values_dp = []
+titles = []
+for p_, gamma_ in zip(Ps, gammas):
+    dp_world = DP_Policy(absorbing_locs=absorbing_locs, special_rewards=special_rewards, p_transition=p_)
+    policy_opt_DPvit, V_optimal_DPvit, epochs_DPvit = dp_world.value_iteration(gamma_, threshold)
+    policies_dp.append(policy_opt_DPvit)
+    values_dp.append(V_optimal_DPvit)
+    titles.append(r'p={} $\gamma$={}'.format(p_, gamma_))
+# dp_world.draw_deterministic_policy_grid(policies_dp, values_dp, titles, n_columns=len(p_collection), n_lines=len(gamma_collection), save='DP_policy_grid.png')
+dp_world.draw_value_grid(values_dp, titles=titles, n_columns=len(p_collection), n_lines=len(gamma_collection), save='DP_value_grid.png')
 
-
-
-
-
+print('2.b.4 took {}s'.format(time.time() - start_time))
 
 
 
@@ -810,60 +890,6 @@ class MC_World(NewGridWorld):
 
         self.des_action_tracker = [0, 0]    # Keep track of how often desired action gets chosen
 
-    # REWRITE
-    def mc_iterative_optimisationL(self, discount=0.55, epsilon_init=0.1, n=200, alpha=0.4, V_optimal=None, decay_alpha=False, decay_eps=True, batch=1):
-
-        Q = np.random.rand(self.state_size, self.action_size)
-        policy = self.get_epsilon_greedy_policy(Q, epsilon_init)
-        epsilon = epsilon_init
-        returns_history = []
-        all_rmse = []
-
-        for i in range(n):
-            trace = self.run_episode(policy, epsilon)
-
-        total_rewards = []
-        mean_rewards = []
-        all_rmse = []
-
-        Q = np.zeros((self.state_size, self.action_size))
-        epsilon = epsilon_init
-
-        for k in range(n):
-            trace = self.run_episode(policy, epsilon)
-            current_state = self.get_random_start()
-            desired_action = self.choose_desired_action(current_state, Q, epsilon)
-
-            total_reward = []
-            while not(self.absorbing[0, current_state]):
-                action = self.choose_action(current_state, desired_action)
-
-                post_state, reward = self.take_step(current_state, action)
-                post_des_action = self.choose_desired_action(post_state, Q, epsilon)
-                post_action = self.choose_action(post_state, post_des_action)
-
-                Q[current_state, action] += alpha * (reward + discount * Q[post_state, post_action] - Q[current_state, action])
-
-                current_state, desired_action = post_state, post_action
-                total_reward.append(reward)
-
-            epsilon = 1 / (k+1)
-
-            # Record rewards
-            total_rewards.append(np.sum(total_reward))
-            mean_rewards.append(np.average(self.get_discounted_rewards(total_reward, discount)))
-            if np.any(V_optimal):   # Root Mean Square Error
-                policy = self.get_greedy_policy(Q)
-                V = self.get_optimal_value(Q, policy)
-                rmse = self.get_rmse(V, V_optimal)
-                all_rmse.append(rmse)
-
-        Policy_sarsa = self.get_epsilon_greedy_policy(Q, epsilon)
-        V_sarsa = self.get_optimal_value(Q, Policy_sarsa)
-
-        return Policy_sarsa, V_sarsa, total_rewards, mean_rewards, all_rmse
-    # /REWRITE
-
     def mc_iterative_optimisation(self, discount=0.45, epsilon_init=0.1, n=5, alpha=0.001, V_optimal=None, decay_alpha=False, decay_eps=True, batch=1):
         """ MC Iterative Learning to Control """
         # Q = np.zeros((self.state_size, self.action_size))
@@ -871,9 +897,7 @@ class MC_World(NewGridWorld):
         policy = self.get_epsilon_greedy_policy(Q, epsilon_init)
 
         # Trackers
-        total_rewards = []
-        mean_rewards = []
-        returns = []
+        total_returns = []
         all_rmse = []
         epsilon = epsilon_init
         
@@ -885,49 +909,45 @@ class MC_World(NewGridWorld):
             state_a_tracker = np.zeros((self.state_size, self.action_size))
 
             # Rewrite
-            for i, (state, action, R) in enumerate(trace):
-                G = 0 
-                Rt = 0
-                if (not state_a_tracker[state, action]) and self.use_first_visit:
-                    state_a_tracker[state, action] += 1
-                    G = self.get_discounted_rewards(rewards_forward[i::], discount)
-                    G = np.sum(G)
-                    for _, _, rev_R in reversed(trace[i::]):
-                        Rt = discount*Rt + rev_R
+            # for i, (state, action, R) in enumerate(trace):
+            #     G = 0 
+            #     Rt = 0
+            #     if (not state_a_tracker[state, action]) and self.use_first_visit:
+            #         state_a_tracker[state, action] += 1
+            #         G = self.get_discounted_rewards(rewards_forward[i::], discount)
+            #         G = np.sum(G)
+            #         for _, _, rev_R in reversed(trace[i::]):
+            #             Rt = discount*Rt + rev_R
 
-                    if decay_alpha:
-                        alpha = 1 / state_a_tracker[state, action]
+            #         if decay_alpha:
+            #             alpha = 1 / state_a_tracker[state, action]
                     
-                    Q[state, action] += alpha * (G - Q[state, action])
+            #         Q[state, action] += alpha * (G - Q[state, action])
             # /Rewrite
 
+            ### OLD but works
+            G = 0
+            for i, (state, action, R) in enumerate(trace[::-1]):
+                if state_a_tracker[state, action] and self.use_first_visit:
+                    continue
+                state_a_tracker[state, action] += 1
 
-            # total_reward = []
-            # # local_sa_tracker = np.zeros((self.state_size, self.action_size))
-            # G = 0
-            # for i, (state, action, R) in enumerate(trace[::-1]):
-            #     if (not state_a_tracker[state, action]) and self.use_first_visit:
-            #         # local_sa_tracker[state, action] += 1
-            #         state_a_tracker[state, action] += 1
+                # Find the points in the trace with this (s, a)
+                reward_idx = self.get_occurence_idx(trace, state, action)
+                if reward_idx==None:
+                    # Use current index if first index not found
+                    reward_idx = [(len(trace)-1) - i]
 
-            #     # Find the points in the trace with this (s, a)
-            #     reward_idx = self.get_occurence_idx(trace, state, action)
-            #     if reward_idx==None:
-            #         # Use current index if first index not found
-            #         reward_idx = [(len(trace)-1) - i]
-
-            #     # Calculate first-visit or every-visit returns 
-            #     G = rewards_forward[reward_idx[0]:]
-            #     G = np.sum(self.get_discounted_rewards(G, discount))
-            #     total_reward.append(G)
-            #     Rt = G / state_a_tracker[state, action]
+                # Calculate first-visit or every-visit returns 
+                G = rewards_forward[reward_idx[0]:]
+                G = np.sum(self.get_discounted_rewards(G, discount))
+                Rt = G / state_a_tracker[state, action]
                 
-            #     if decay_alpha:
-            #         alpha = 1 / state_a_tracker[state, action]
+                if decay_alpha:
+                    alpha = 1 / state_a_tracker[state, action]
 
-            #     # G = G * discount + R
-
-            #     Q[state, action] += alpha * (Rt - Q[state, action])
+                Q[state, action] += alpha * (Rt - Q[state, action])
+            ### /OLD but works
             
             if (run % batch) == 0:
                 policy = self.get_epsilon_greedy_policy(Q, epsilon)
@@ -935,13 +955,11 @@ class MC_World(NewGridWorld):
                 epsilon = 1 / (i+1)
 
             # Record rewards
-            total_reward = 0
-            for s, a, R in trace:
-                total_reward = discount*total_reward + R
+            total_return = 0
+            for s, a, R in trace:   # Forward discounted
+                total_return = discount*total_return + R
             # total_reward = self.get_discounted_rewards(rewards_reverse, discount)
-            total_rewards.append(np.sum(total_reward))
-            mean_rewards.append(np.average(total_reward))
-            # returns.append(np.sum(self.get_discounted_rewards(total_reward[::-1], discount)))
+            total_returns.append(np.sum(total_return))
             if np.any(V_optimal):   # Root Mean Square Error
                 # V = self.get_optimal_value(Q, policy)
                 # TODO: Changing V calculation
@@ -953,7 +971,7 @@ class MC_World(NewGridWorld):
         V = self.get_optimal_value(Q, policy)
 
         # policy = self.get_greedy_policy(Q)
-        return policy, V, total_rewards, mean_rewards, all_rmse
+        return policy, V, total_returns, all_rmse
 
     # def mc_batch_optimisation(self, discount=0.45, epsilon_init=0.1, batch=1, n=5, total_runs=10, alpha=0.001, V_optimal=None):
     #     """ MC Batch Learning to Control """
@@ -1268,92 +1286,99 @@ alpha = 0.01
 
 use_first_visit=True
 visit_text = '(First-visit)' if use_first_visit else '(Every-visit)'
-# decay_alpha = True
-batch = 15
-n = 9000
-total_runs=1
+decay_alpha = False
+batch = 1
 
+print('MC Parameters: \np={} \ngamma={} \nepsilon={} \nalpha={} \nuse_first_visit={}'.format(p, gamma, epsilon_init, alpha, use_first_visit))
 
-world = MC_World(absorbing_locs, special_rewards, p, use_first_visit=use_first_visit)
-
-dp_world = DP_Policy(absorbing_locs, special_rewards, p)
-Policy_optimal, V_optimal, epochs = dp_world.value_iteration(gamma, threshold)
+# Getting Optimal Value from above
+Policy_optimal = policy_opt_DPvit
+V_optimal = V_optimal_DPvit
 print('Optimal value grid')
-dp_world.draw_value(V_optimal, title=r'DP: Optimal Value for Grid World, $\gamma$={} threshold={}'.format(gamma, threshold))
+# dp_world.draw_value(V_optimal, title=r'DP: Optimal Value for Grid World, $\gamma$={} threshold={}'.format(gamma, threshold))
 
-
+'''
 # MC
+mc_world = MC_World(absorbing_locs, special_rewards, p, use_first_visit=use_first_visit)
+
+print('\n2.c.3 Do repeats and mean and std here')
+start_time = time.time()
 all_rmse_mc = []
-all_total_rewards_mc = []
-for i in range(total_runs):
-    policy_mc, V_mc, total_rewards_mc, returns_mc, rmse_mc = world.mc_iterative_optimisation(discount=gamma, epsilon_init=epsilon_init, n=n, alpha=alpha, V_optimal=V_optimal)
-    all_rmse_mc.append(rmse_mc)
-    all_total_rewards_mc.append(total_rewards_mc)
-# policy, V, total_rewards, returns, rmse = world.mc_batch_optimisation(discount=gamma, epsilon_init=epsilon_init, n=n, alpha=alpha, V_optimal=V_optimal)
-print('Average RMSE MC')
-world.draw_learning_curve(all_rmse_mc, title_text=r'MC: RMSE, {} repeats {} $\alpha$={} $\epsilon$={}'.format(total_runs, visit_text, alpha, epsilon_init), axislabels=('Episodes', 'RMSE'))
-world.draw_learning_curve(all_total_rewards_mc, title_text=r'MC: Total Discounted Returns, {} repeats {} $\alpha$={} $\epsilon$={}'.format(total_runs, visit_text, alpha, epsilon_init), axislabels=('Episodes', 'RMSE'))
+all_total_returns_mc = []
+# total_runs=100  # repeats lol
+# n = 5000
+# for i in range(total_runs):     # Averaging
+#     policy_mc, V_mc, total_returns_mc, rmse_mc = mc_world.mc_iterative_optimisation(discount=gamma, epsilon_init=epsilon_init, n=n, alpha=alpha, V_optimal=V_optimal, batch=batch)
+#     all_rmse_mc.append(rmse_mc)
+#     all_total_returns_mc.append(total_returns_mc)
+# policy, V, total_rewards, returns, rmse = mc_world.mc_batch_optimisation(discount=gamma, epsilon_init=epsilon_init, n=n, alpha=alpha, V_optimal=V_optimal)
+print('Average RMSE and returns MC')
+# mc_world.draw_learning_curve(all_rmse_mc, title_text=r'MC: RMSE, {} repeats {} $\alpha$={} $\epsilon$={}'.format(total_runs, visit_text, alpha, epsilon_init), axislabels=('Episodes', 'Root Mean Square Error'), save='MC_rmse_ave.png')
+# mc_world.draw_learning_curve(all_total_returns_mc, title_text=r'MC: Discounted Returns, {} repeats {} $\alpha$={} $\epsilon$={}'.format(total_runs, visit_text, alpha, epsilon_init), axislabels=('Episodes', 'Discounted returns'), save='MC_learncurve_ave.png')
 
 print('Drawing policy grid')
-world.draw_stochastic_policy(policy_mc, V_mc, title=r'MC: Policy {} $\alpha$={} $\epsilon$={}'.format(visit_text, alpha, epsilon_init))
+# mc_world.draw_stochastic_policy(policy_mc, V_mc, title=r'MC: Policy {} $\alpha$={} $\epsilon$={}'.format(visit_text, alpha, epsilon_init))
 
 print('Drawing value grid')
-world.draw_value(V_mc, title=r'MC: Value for Grid World, $\alpha$={} $\epsilon$={}'.format(alpha, epsilon_init))
+# mc_world.draw_value(V_mc, title=r'MC: Value for Grid World, $\alpha$={} $\epsilon$={}'.format(alpha, epsilon_init))
 
-# print('Getting returns vs episode')
-world.draw_rewards(total_rewards_mc, use_first_visit)
-world.draw_rewards(returns_mc, use_first_visit)
-world.draw_learning_curve(returns_mc, title_text='MC: Returns', label='', new_fig=True, repeats=False, axislabels=('Episodes','Mean discounted rewards'))
-world.draw_learning_curve(rmse_mc, title_text='MC: RMSE Optimal Value function', label='', new_fig=True, repeats=False, axislabels=('Episodes', 'Root Mean Square Error'))
-
-# print('The desired action was chosen {} percent of the time.'.format(world.des_action_tracker[1]/world.des_action_tracker[0]))
-
-
-# Repeats
-print('2.c.3 Do repeats and mean and std here')
-# repeat_runs = 5
-# all_total_rewards_mc = []
-# all_mean_rewards_mc = []
-# all_rmse_mc = []
-# for i in range(repeat_runs):
-#     policy, V, total_rewards, mean_rewards, rmse = world.mc_iterative_optimisation(discount=gamma, epsilon_init=epsilon_init, n=n, alpha=alpha, V_optimal=V_optimal)
-#     all_total_rewards_mc.append(total_rewards)
-#     all_mean_rewards_mc.append(mean_rewards)
-#     all_rmse_mc.append(rmse)
-# 
-# world.draw_learning_curve(all_mean_rewards_mc)
-# Average
-
+# print('The desired action was chosen {} percent of the time.'.format(mc_world.des_action_tracker[1]/mc_world.des_action_tracker[0]))
+print('2.c.3 took {}s'.format(time.time() - start_time))
 
 
 # Varying alpha and epsilon
-print('2.c.4 Vary alpha and epsilon')
-policies = []
-values = []
-titles = []
-all_rewards_varying = []
-alphas = [0.1, 0.4, 0.8] * 3
-epsilon_inits = np.sort([0.1, 0.4, 0.8] * 3)
-n = 1000
-# for i in range(len(alphas)):
-#     alpha = alphas[i]
-#     epsilon_init = epsilon_inits[i]
-#     policy, V, total_rewards, mean_rewards, rmse = world.mc_iterative_optimisation(discount=gamma, epsilon_init=epsilon_init, n=n, alpha=alpha, V_optimal=V_optimal)
-#     policies.append(policy)
-#     values.append(V)
-#     titles.append('Alpha={}, epsilon={}'.format(alpha, epsilon_init))
-#     all_rewards_varying.append(mean_rewards)
+print('\n2.c.4 Vary alpha and epsilon')
+start_time = time.time()
 
-    # world.draw_stochastic_policy(policies[i], values[i], titles[i])
-# world.draw_stochastic_policy_grid(policies, values, titles, n_columns=3, n_lines=3)
-# world.draw_learning_curve_together(all_rewards_varying, ' Monte Carlo', labels=list(zip(alphas, epsilon_inits)))
+rep_policies, rep_values, rep_all_total_returns, rep_all_rmse = [], [], [], []
+titles_mc = []
 
+alpha_collection = [0.01, 0.2, 0.4]
+epsilon_collection = [0.01, 0.2, 0.8]
+
+alphas = alpha_collection * len(epsilon_collection)
+epsilon_inits = np.sort(epsilon_collection * len(alpha_collection))
+repeats = 30
+n = 3000
+for alpha, epsilon_init in zip(alphas, epsilon_inits):
+    if (alpha == 0.01) and (epsilon_init == 0.01):
+        continue
+    policies_mc, values_mc, rep_returns_mc, rep_rmse_mc = [], [], [], []
+    for r in range(repeats):
+        policy_mc, V_mc, total_returns_mc, rmse_mc = mc_world.mc_iterative_optimisation(discount=gamma, epsilon_init=epsilon_init, n=n, alpha=alpha, V_optimal=V_optimal, batch=batch)
+        
+        policies_mc.append(policy_mc)
+        values_mc.append(V_mc)
+        rep_returns_mc.append(total_returns_mc)
+        rep_rmse_mc.append(rmse_mc)
+    rep_policies.append(policies_mc)
+    rep_values.append(values_mc)
+    rep_all_total_returns.append(rep_returns_mc)
+    rep_all_rmse.append(rep_rmse_mc)
+    titles_mc.append('Alpha={}, epsilon={}'.format(alpha, epsilon_init))
+
+
+        # mc_world.draw_stochastic_policy(policies[-1], values[-1], titles[-1])
+# mc_world.draw_stochastic_policy_grid(policies_mc, values_mc, titles_mc, n_columns=3, n_lines=3)
+# mc_world.draw_deterministic_policy_grid(policies_mc, values_mc, titles_mc, n_columns=len(p_collection), n_lines=len(gamma_collection), save='DP_policy_grid.png')
+
+np.save('rep_policies_mc.npy', rep_policies)
+np.save('rep_values_mc.npy', rep_values)
+np.save('rep_all_total_returns_mc.npy', rep_all_total_returns)
+np.save('rep_all_rmse_mc.npy', rep_all_rmse)
+
+# Varying alpha and epsilon: Averaged
+for var in range(len(epsilon_collection)):
+    s = len(epsilon_collection)
+    mc_world.draw_learningcurve_repvars(rep_all_total_returns[var*s:(var*s)+s], title_text=r'MC: Discounted Returns varying $\alpha$ and $\epsilon$, repeats={}'.format(repeats), var_labels=titles_mc[var*s:(var*s)+s], axislabels=('Episodes', 'Returns'), new_fig=False, save='MC_learncurve_varying_e{}_2c4.png'.format(epsilon_collection[var]))
+    mc_world.draw_learningcurve_repvars(rep_all_rmse[var*s:(var*s)+s], title_text=r'MC: RMSE varying $\alpha$ and $\epsilon$, repeats={}'.format(repeats), var_labels=titles_mc[var*s:(var*s)+s], axislabels=('Episodes', 'RMSE'), new_fig=False, save='MC_rmse_varying_e{}_2c4.png'.format(epsilon_collection[var]))
+
+print('2.c.4 took {}s'.format(time.time() - start_time))
 # TODO
 ## In mc policy evaluation, where value is improved, batch is not the right thing to use 
 
-
-
-
+exit()
+'''
 
 
 
@@ -1382,8 +1407,7 @@ class TD_World(MC_World):
 
     def sarsa(self, discount=0.55, epsilon_init=0.1, episode_total=200, alpha=0.4, V_optimal=None):
 
-        total_rewards = []
-        mean_rewards = []
+        total_returns = []
         all_rmse = []
 
         Q = np.zeros((self.state_size, self.action_size))
@@ -1394,12 +1418,19 @@ class TD_World(MC_World):
             desired_action = self.choose_desired_action(current_state, Q, epsilon)
 
             total_reward = []
+            sarsa_table = []
             while not(self.absorbing[0, current_state]):
                 action = self.choose_action(current_state, desired_action)
 
                 post_state, reward = self.take_step(current_state, action)
                 post_des_action = self.choose_desired_action(post_state, Q, epsilon)
                 post_action = self.choose_action(post_state, post_des_action)
+
+                sarsa_table.append((current_state, action, reward, post_state, post_action))
+
+                # if len(sarsa_table) % batch == 0:
+                #     # Average SARSA
+                #     sarsa = []
 
                 Q[current_state, action] += alpha * (reward + discount * Q[post_state, post_action] - Q[current_state, action])
 
@@ -1409,8 +1440,10 @@ class TD_World(MC_World):
             epsilon = 1 / (k+1)
 
             # Record rewards
-            total_rewards.append(np.sum(total_reward))
-            mean_rewards.append(np.average(self.get_discounted_rewards(total_reward, discount)))
+            total_return = 0
+            for R in total_reward:   # Forward discounted
+                total_return = discount*total_return + R
+            total_returns.append(np.sum(total_return))
             if np.any(V_optimal):   # Root Mean Square Error
                 policy = self.get_greedy_policy(Q)
                 V = self.get_optimal_value(Q, policy)
@@ -1420,13 +1453,12 @@ class TD_World(MC_World):
         Policy_sarsa = self.get_epsilon_greedy_policy(Q, epsilon)
         V_sarsa = self.get_optimal_value(Q, Policy_sarsa)
 
-        return Policy_sarsa, V_sarsa, total_rewards, mean_rewards, all_rmse
+        return Policy_sarsa, V_sarsa, total_returns, all_rmse
 
     def q_learning(self, discount=0.55, epsilon_init=0.1, episode_total=200, alpha=0.4, V_optimal=None):
         """ Implementation of Q-Learning """
 
-        total_rewards = []
-        mean_rewards = []
+        total_returns = []
         all_rmse = []
 
         Q = np.zeros((self.state_size, self.action_size))
@@ -1450,8 +1482,10 @@ class TD_World(MC_World):
             epsilon = 1 / (k+1)
 
             # Record rewards
-            total_rewards.append(np.sum(total_reward))
-            mean_rewards.append(np.average(self.get_discounted_rewards(total_reward, discount)))
+            total_return = 0
+            for R in total_reward:   # Forward discounted
+                total_return = discount*total_return + R
+            total_returns.append(np.sum(total_return))
             if np.any(V_optimal):   # Root Mean Square Error
                 policy = self.get_greedy_policy(Q)
                 V = self.get_optimal_value(Q, policy)
@@ -1461,85 +1495,162 @@ class TD_World(MC_World):
         Policy_ql = self.get_epsilon_greedy_policy(Q, epsilon)
         V_ql = self.get_optimal_value(Q, Policy_ql)
 
-        return Policy_ql, V_ql, total_rewards, mean_rewards, all_rmse
+        return Policy_ql, V_ql, total_returns, all_rmse
 
 
-print('2.d.1 TD Learning-estimated Optimal Value function. 2.d.2 Optimal value and policy graphs')
-world = TD_World(absorbing_locs, special_rewards, p, use_first_visit=True, use_epsilon_greedy=True)
+print('\n2.d.1 TD Learning-estimated Optimal Value function. 2.d.2 Optimal value and policy graphs')
+p = 0.45
+td_world = TD_World(absorbing_locs, special_rewards, p, use_first_visit=True, use_epsilon_greedy=True)
 
-discount = gamma
+discount = 0.55
 epsilon_init = 0.1
 alpha = 0.4
-episode_total = 200
-Policy_sarsa, V_sarsa, total_rewards, mean_rewards, rmse_sarsa = world.sarsa(discount, epsilon_init, episode_total, alpha, V_optimal)
+episode_total = 5000
+repeats = 100
+all_total_returns_td, all_rmse_td = [], []
+# for rep in range(repeats):
+#     Policy_sarsa, V_sarsa, total_returns, rmse_sarsa = td_world.sarsa(discount, epsilon_init, episode_total, alpha, V_optimal)
+#     all_total_returns_td.append(total_returns)
+#     all_rmse_td.append(rmse_sarsa)
 
 # SARSA Plots
-# world.draw_stochastic_policy(Policy_sarsa, V_sarsa)
-# world.draw_value(V_sarsa)
-# world.draw_learning_curve(total_rewards, title_text='SARSA: Total Rewards per trace', label='', new_fig=True, repeats=False, axislabels=('Episodes', 'Total Reward'))
-# world.draw_learning_curve(mean_rewards, title_text='SARSA: Mean Discounted Rewards', label='', new_fig=True, repeats=False)
-# world.draw_learning_curve(rmse_sarsa, title_text='SARSA: RMSE Optimal Value function', label='', new_fig=True, repeats=False, axislabels=('Episodes', 'Root Mean Square Error'))
+# td_world.draw_stochastic_policy(Policy_sarsa, V_sarsa, title='TD SARSA: Policy', save='TD-S_policy_world.png')
+# td_world.draw_value(V_sarsa, 'TD SARSA: Value function', save='TD-S_value_world.png')
 
-print('2.d.4 TD Varying the exploration parameter e and the learning rate α')
-# SARSA Varying learning rate
-rep_policies = []
-rep_values = []
-rep_all_total_rewards = []
-rep_all_mean_rewards = []
-rep_all_rmse_sarsa = []
+# print('\n2.d.3 TD Learning curve')
+# td_world.draw_learning_curve(all_total_returns_td, title_text='SARSA: Discounted Returns', label='', new_fig=True, repeats=False, axislabels=('Episodes', 'Discounted Returns'))
+# td_world.draw_learning_curve(all_rmse_td, title_text='SARSA: RMSE Optimal Value function', label='', new_fig=True, repeats=False, axislabels=('Episodes', 'Root Mean Square Error'))
+
+'''
+print('\n2.d.4 TD Varying the exploration parameter e and the learning rate α')
+start_time = time.time()
+
+##### SARSA Varying learning rate
+rep_policies, rep_values, rep_all_total_returns, rep_all_rmse_sarsa = [], [], [], []
 titles = []
-alphas = [0.1, 0.4, 0.8] * 3
-epsilon_inits = np.sort([0.1, 0.4, 0.8] * 3)
-repeats = 3
-episode_total = 5000
+
+alpha_collection = [0.01, 0.2, 0.4]
+epsilon_collection = [0.01, 0.2, 0.8]
+alphas = alpha_collection * len(epsilon_collection)
+epsilon_inits = np.sort(epsilon_collection * len(alpha_collection))
+
+batch = 1
+repeats = 30
+episode_total = 3000
 for alpha, epsilon_init in zip(alphas, epsilon_inits):
     policies = []
     values = []
     all_total_rewards = []
-    all_mean_rewards = []
     all_rmse_sarsa = []
     
     for rep in range(repeats):
-        print('{} ... Running SARSA with alpha={} epsilon={}'.format(rep, alpha, epsilon_init))
-        Policy_sarsa, V_sarsa, total_rewards, mean_rewards, rmse_sarsa = world.sarsa(discount, epsilon_init, episode_total, alpha, V_optimal)
+        Policy_sarsa, V_sarsa, total_rewards, rmse_sarsa = td_world.sarsa(discount, epsilon_init, episode_total, alpha, V_optimal)
         
         policies.append(Policy_sarsa)
         values.append(V_sarsa)
         all_total_rewards.append(total_rewards)
-        all_mean_rewards.append(mean_rewards)
         all_rmse_sarsa.append(rmse_sarsa)
+    # print('{} ... Ran SARSA with alpha={} epsilon={}'.format(rep, alpha, epsilon_init))
     titles.append(r'$\alpha=${} $\epsilon={}$'.format(alpha, epsilon_init))
 
     rep_policies.append(np.average(policies, axis=0))
     rep_values.append(np.average(values, axis=0))
-    rep_all_total_rewards.append(all_total_rewards)
-    rep_all_mean_rewards.append(all_mean_rewards)
+    rep_all_total_returns.append(all_total_rewards)
     rep_all_rmse_sarsa.append(all_rmse_sarsa)
+
+np.save('rep_policies_sarsa.npy', rep_policies)
+np.save('rep_values_sarsa.npy', rep_values)
+np.save('rep_all_total_returns_sarsa.npy', rep_all_total_returns)
+np.save('rep_all_rmse_sarsa.npy', rep_all_rmse_sarsa)
 
 # Draw averaged
 # for i in range(len(alphas)):
-    # world.draw_stochastic_policy(rep_policies[i], rep_values[i], titles[i])  #, n_columns=1, n_lines=3)
+    # td_world.draw_stochastic_policy(rep_policies[i], rep_values[i], titles[i])  #, n_columns=1, n_lines=3)
 
-world.draw_learning_curve_together(rep_all_total_rewards, title_text=('TD SARSA: Total rewards, {} repeats'.format(repeats)), labels=titles, repeats=True, new_fig=True)
-world.draw_learning_curve_together(rep_all_mean_rewards, title_text=('TD SARSA: Mean rewards, {} repeats'.format(repeats)), labels=titles, repeats=True, new_fig=True)
+td_world.draw_stochastic_policy(rep_policies[0], rep_values[0], title='TD SARSA: Policy, {} repeats'.format(repeats), save='TD-S_policy_world.png')
+td_world.draw_value(rep_values[0], 'TD SARSA: Value function, {} repeats'.format(repeats), save='TD-S_value_world.png')
 
+print('\n2.d.3 TD Learning curve')
+td_world.draw_learning_curve(rep_all_total_returns[0], title_text=r'TD SARSA: Discounted Returns, {} repeats {} $\alpha$={} $\epsilon$={}'.format(repeats, visit_text, alpha_collection[0], epsilon_collection[0]), axislabels=('Episodes', 'Discounted Returns'), save='TD-S_returns.png')
+td_world.draw_learning_curve(rep_all_rmse_sarsa[0], title_text=r'TD SARSA: RMSE Optimal Value function, {} repeats {} $\alpha$={} $\epsilon$={}'.format(repeats, visit_text, alpha_collection[0], epsilon_collection[0]), axislabels=('Episodes', 'Root Mean Square Error'), save='TD-S_rmse.png')
+
+
+for var in range(len(epsilon_collection)):
+    s = len(epsilon_collection)
+    td_world.draw_learningcurve_repvars(rep_all_total_returns[var*s:(var*s)+s], title_text=(r'TD SARSA: Discounted Returns varying $\alpha$ and $\epsilon$, {} repeats'.format(repeats)), var_labels=titles[var*s:(var*s)+s], axislabels=('Episodes', 'Returns'), new_fig=False, save='TD-S_returns_e{}.png'.format(epsilon_collection[var]))
+    td_world.draw_learningcurve_repvars(rep_all_rmse_sarsa[var*s:(var*s)+s], title_text=(r'TD SARSA: RMSE varying $\alpha$ and $\epsilon$, {} repeats'.format(repeats)), var_labels=titles[var*s:(var*s)+s], axislabels=('Episodes', 'Root Mean Square Error'), new_fig=False, save='TD-S_rmse_e{}.png'.format(epsilon_collection[var]))
+'''
 
 ###### Q-learning 
-episode_total = 1000
-epsilon_init = 1
+print('Q Learning')
+q_time = time.time()
+rep_policies, rep_values, rep_all_total_returns_ql, rep_all_rmse_ql = [], [], [], []
+titles = []
+
+repeats = 1
+episode_total = 10000
+epsilon_init = 0.2
 discount = 0.55
-alpha = 0.4
-Policy_ql, V_ql, total_rewards, mean_rewards, rmse_ql = world.q_learning(discount, epsilon_init, episode_total, alpha, V_optimal)
+alpha = 0.001
+for rep in range(repeats):
+    Policy_ql, V_ql, total_rewards_ql, rmse_ql = td_world.q_learning(discount, epsilon_init, episode_total, alpha, V_optimal)
+    rep_policies.append(Policy_ql)
+    rep_values.append(V_ql)
+    rep_all_total_returns_ql.append(total_rewards_ql)
+    rep_all_rmse_ql.append(rmse_ql)
+
+np.save('rep_policies_ql.py', rep_policies)
+np.save('rep_values_ql.py', rep_values)
+np.save('rep_all_total_returns_ql.py', rep_all_total_returns_ql)
+np.save('rep_all_rmse_ql.py', rep_all_rmse_ql)
 
 # Q-Learning Plots
-world.draw_stochastic_policy(Policy_ql, V_ql)
-world.draw_value(V_ql)
-world.draw_learning_curve(total_rewards, title_text='Q-Learning: Total Rewards per trace', label='', new_fig=True, repeats=False, axislabels=('Episodes', 'Total Reward'))
-world.draw_learning_curve(mean_rewards, title_text='Q-Learning: Mean Discounted Rewards', label='', new_fig=True, repeats=False)
-world.draw_learning_curve(rmse_ql, title_text='Q-Learning: RMSE Optimal Value function', label='', new_fig=True, repeats=False, axislabels=('Episodes', 'Root Mean Square Error'))
+td_world.draw_stochastic_policy(np.average(rep_policies, axis=0), np.average(rep_values, axis=0), save='TD-Q_policy_world.png')
+td_world.draw_value(np.average(rep_values, axis=0), save='TD-Q_value_world.png')
+td_world.draw_learning_curve(rep_all_total_returns_ql, title_text=r'Q-Learning: Discounted Returns, {} repeats {} $\alpha$={} $\epsilon$={}'.format(repeats, visit_text, alpha, epsilon_init), axislabels=('Episodes', 'Discounted returns'), save='TD-Q_returns.png')
+td_world.draw_learning_curve(rep_all_rmse_ql, title_text=r'Q-Learning: RMSE, {} repeats {} $\alpha$={} $\epsilon$={}'.format(repeats, visit_text, alpha, epsilon_init), axislabels=('Episodes', 'Root Mean Square Error'), save='TD-Q_rmse.png')
+
+
+print('Q-learning took {}s'.format(time.time() - q_time))
+print('2.d.4 took {}s'.format(time.time() - start_time))
 
 
 
 
+
+'''
 ################# Comparison of Learners #################
 
+print('2.e.1 RMSE for MC and TD')
+
+print('2.e.2 Comparing MC and TD')
+# Optimal value function estimation error
+"""
+# MC
+plt.figure()
+mean_rmse_mc = np.mean(all_rmse_mc, axis=0)
+mean_returns_mc = np.mean(all_total_returns_mc, axis=0)
+plt.scatter(mean_rmse_mc, mean_returns_mc)
+plt.title('MC: RMSE vs Returns')
+plt.savefig('Comparison_MC.png')
+plt.show()
+"""
+
+# TD
+mean_rmse_td = np.mean(all_rmse_td, axis=0)
+mean_returns_td = np.mean(all_total_returns_td, axis=0)
+plt.scatter(mean_rmse_mc, mean_returns_mc)
+plt.title('TD SARSA: RMSE vs Returns')
+plt.savefig('Comparison_TD.png')
+plt.show()
+
+print('2.e.2 Comparing MC and TD')
+
+np.save('all_rmse_mc.npy', all_rmse_mc)
+np.save('all_total_returns_mc.npy', all_total_returns_mc)
+np.save('all_rmse_td.npy', all_rmse_td)
+np.save('all_total_returns_td.npy', all_total_returns_td)
+
+
+print('Everything took ', time.time() - full_start_time)
+'''
