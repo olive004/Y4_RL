@@ -157,7 +157,7 @@ class Network(torch.nn.Module):
 class DQN:
 
     # The class initialisation function.
-    def __init__(self):
+    def __init__(self, world_length, agent):
         # Create a Q-network, which predicts the q-value for a particular state.
         # NOTE: Previously I changed input dimension from default 2 to 3, and output dimension from 4 to 1 -> changed back
         self.q_network = Network(input_dimension=2, output_dimension=4)
@@ -166,10 +166,18 @@ class DQN:
 
         self.loss_criterion = torch.nn.MSELoss()
 
-    def get_q_values(self, world_length, agent):
-        num_states = int(world_length / agent.action_length)
-        states_vector = np.array(np.arange(0, world_length, agent.action_length), dtype=np.float32) + (agent.action_length / 2)
-        q_values = np.zeros((num_states, num_states, agent.action_size))
+        self.world_length = world_length 
+        self.agent = agent
+
+        self.q_values = self.init_q_values()
+
+    def init_q_values(self):
+        num_states = int(self.world_length / self.agent.action_length)
+        states_vector = np.array(np.arange(0, self.world_length, self.agent.action_length), dtype=np.float32) + (self.agent.action_length / 2)
+        q_values = np.zeros((num_states, num_states, self.agent.action_size))
+        return q_values
+
+    def update_q_values(self, states, prediction):
         for i, x_state in enumerate(states_vector):
             for j, y_state in enumerate(states_vector):
                 in_state = torch.tensor((x_state, y_state))
@@ -207,6 +215,8 @@ class DQN:
         minibatch_labels_tensor = torch.tensor(minibatch_labels)
         # Do a forward pass of the network using the inputs batch
         network_A_prediction = self.q_network.forward(minibatch_input_tensor)
+        
+        self.update_q_values(state, network_A_prediction)
         # network_prediction = torch.argmax(network_A_prediction)
         # network_prediction = network_A_prediction[action]
         # network_prediction = network_A_prediction[list(range(0,len(action))), action]
@@ -229,7 +239,7 @@ if __name__ == "__main__":
     # Create an agent
     agent = Agent(environment)
     # Create a DQN (Deep Q-Network)
-    dqn = DQN()
+    dqn = DQN(world_length, agent)
     
     # Create replay buffer
     Buffer = ReplayBuffer()
