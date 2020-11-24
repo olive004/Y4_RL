@@ -22,7 +22,7 @@ class QValueVisualiser:
                 # Find the q value ranges for this state
                 max_q_value = np.max(q_values[col, row, :])
                 min_q_value = np.min(q_values[col, row, :])
-                q_value_range = max_q_value - min_q_value
+                q_value_range = max_q_value - min_q_value + 0.000001
                 # Draw the q values for this state
                 for action in range(np.shape(q_values)[2]):
                     # Normalise the q value with respect to the minimum and maximum q values

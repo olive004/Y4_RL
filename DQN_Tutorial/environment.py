@@ -43,7 +43,7 @@ class Environment:
         return next_state, distance_to_goal
 
     # Function to draw the environment and display it on the screen, if required
-    def draw(self, agent_state, optimal_trace=None):
+    def draw(self, agent_state, optimal_trace=None, opt_filename=False):
         # Create the background image
         window_top_left = (0, 0)
         window_bottom_right = (self.magnification * 1, self.magnification * 1)
@@ -60,25 +60,24 @@ class Environment:
         border_top_left = (0, 0)
         border_bottom_right = (self.magnification * 1, self.magnification * 1)
         cv2.rectangle(self.image, border_top_left, border_bottom_right, (0, 0, 0), thickness=int(self.magnification * 0.02))
-        # Draw the agent
-        agent_centre = (int(agent_state[0] * self.magnification), int((1 - agent_state[1]) * self.magnification))
-        agent_radius = int(0.02 * self.magnification)
-        agent_colour = (100, 199, 246)
-        cv2.circle(self.image, agent_centre, agent_radius, agent_colour, cv2.FILLED)
         # Draw the goal
         goal_centre = (int(self.goal_state[0] * self.magnification), int((1 - self.goal_state[1]) * self.magnification))
         goal_radius = int(0.02 * self.magnification)
         goal_colour = (227, 158, 71)
         cv2.circle(self.image, goal_centre, goal_radius, goal_colour, cv2.FILLED)
+        # Draw the agent
+        agent_centre = (int(agent_state[0] * self.magnification), int((1 - agent_state[1]) * self.magnification))
+        agent_radius = int(0.02 * self.magnification)
+        agent_colour = (100, 199, 246)
+        cv2.circle(self.image, agent_centre, agent_radius, agent_colour, cv2.FILLED)
         # Draw optimal policy line
         if optimal_trace:
-            prev_state = optimal_trace[0][0] * self.magnification
             for step in optimal_trace:
                 state, action, rew, state_ = step
                 state = state * self.magnification
-                cv2.line(self.image, (prev_state[0], prev_state[1]), (state[0], state[1]), (0,255,0), 7)
-                prev_state = state
-            filename = 'optimal_policy_path.png'
+                state_ = state_ * self.magnification
+                cv2.line(self.image, (int(state[0]), int(self.magnification-state[1])), (int(state_[0]), int(self.magnification-state_[1])), (0,255,0), 6)
+            filename = opt_filename if opt_filename else 'optimal_policy_path.png'
             cv2.imshow("Environment", self.image)
             cv2.waitKey(1)
             cv2.imwrite(filename, self.image)
