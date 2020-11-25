@@ -278,8 +278,6 @@ class DQN:
 
     # Function to calculate the loss for a particular transition.
     def _calculate_loss(self, mini_batch):
-        # pass
-        # TODO
         # Input: S, A
         state, action, reward, next_state = mini_batch
         reward = torch.tensor(reward).type(torch.float32)
@@ -342,7 +340,7 @@ if __name__ == "__main__":
     epsilon = 1
     min_eps = 0.1
     eps_dec_factor = 0.995
-    lr = 0.002
+    lr = 0.0003
     discount = 0.9
     decay_epsilon = True
     use_bellman_loss = True
@@ -356,18 +354,18 @@ if __name__ == "__main__":
 
     # Q 1.1 and 1.2:
     # 1.1a)
-    # use_rand_actions, use_online_learning, total_iters, use_target, lr, use_bellman_loss = (True, True, 100, False, 0.001, False)
+    # use_rand_actions, use_online_learning, total_iters, use_target, lr, use_bellman_loss, text_q = (True, True, 100, False, 0.001, False, 'q11a')
     # 1.1b)
-    # use_rand_actions, use_online_learning, total_iters, use_target, lr, use_bellman_loss = (True, False, 100, False, 0.001, False)
+    # use_rand_actions, use_online_learning, total_iters, use_target, lr, use_bellman_loss, text_q = (True, False, 100, False, 0.001, False, 'q11b')
 
     # # Q 1.3:
     # # 1.3a) 
-    # use_rand_actions, use_online_learning, total_iters, use_target, lr, N_update_target, use_bellman_loss, epsilon = (True, False, 100, False, 0.001, 10, True, 0)
+    # use_rand_actions, use_online_learning, total_iters, use_target, lr, N_update_target, use_bellman_loss, epsilon, text_q = (True, False, 100, False, 0.001, 10, True, 0, 'q13a')
     # # 1.3b)
-    # use_rand_actions, use_online_learning, total_iters, use_target, lr, N_update_target, use_bellman_loss, epsilon = (True, False, 100, True, 0.001, 10, True, 0)
+    # use_rand_actions, use_online_learning, total_iters, use_target, lr, N_update_target, use_bellman_loss, epsilon, text_q = (True, False, 100, True, 0.001, 10, True, 0, 'q13b')
 
     # # Q 1.4
-    use_rand_actions, use_online_learning, total_iters, use_target, lr, N_update_target, use_bellman_loss, epsilon = (False, False, 600, True, 0.002, 10, True, 1)
+    use_rand_actions, use_online_learning, total_iters, use_target, lr, N_update_target, use_bellman_loss, epsilon, text_q = (False, False, 600, True, 0.002, 10, True, 1, 'q14')
     
     mini_batch_size = 1 if use_online_learning else 100
     text_target = 'tnet' if use_target else 'qnet'
@@ -445,7 +443,8 @@ if __name__ == "__main__":
     # dqn.final_q_value_update()
     visualiser = QValueVisualiser(environment=environment, magnification=magnification)
     dqn.update_q_values()
-    visualiser.draw_q_values(dqn.q_values)
+    q_filename = "{}_q_values_image_batch{}_lr{}_eps{}_steps{}_{}_{}.png".format(text_q, mini_batch_size, lr, epsilon, total_iters, text_loss_type, text_target)
+    visualiser.draw_q_values(dqn.q_values, q_filename)
 
     # Draw optimal GREEDY policy
     # policy = np.argmax(dqn.q_values, axis=-1)
@@ -457,9 +456,9 @@ if __name__ == "__main__":
         if not(visualise_last) and dqn.optimal_network:
             transition = agent.step(dqn.optimal_network)
         else:
-            transition = agent.step(dqn.q_network)
+            transition = agent.step(dqn.q_network) 
         optimal_trace.append(transition)
-    opt_filename = "loss_vs_iterations_batch{}_lr{}_eps{}_steps{}_{}_{}.png".format(mini_batch_size, lr, epsilon, total_iters, text_loss_type, text_target)
+    opt_filename = "{}_optimal_policy_path_batch{}_lr{}_eps{}_steps{}_{}_{}.png".format(text_q, mini_batch_size, lr, epsilon, total_iters, text_loss_type, text_target)
     environment.draw(agent_state=environment.init_state, optimal_trace=optimal_trace, opt_filename=opt_filename)
 
     # Plot and save the loss vs iterations graph
@@ -469,10 +468,10 @@ if __name__ == "__main__":
     variance = np.std(losses)
     ax.set(xlabel='Iteration', ylabel='Loss', title=('Loss Curve, Batch_size={} '+text_eps).format(mini_batch_size))
     ax.plot(iterations, losses, color='blue')
-    plt.text(iterations[int(0.8*len(iterations))], losses[int(0.8*np.max(losses))], 'std={}'.format(variance))
+    plt.text(0.7*np.max(iterations), 0.6*np.max(losses), 'std={}'.format(round(variance, 5)))
     plt.yscale('log')
     # plt.show()
-    fig.savefig("loss_vs_iterations_batch{}_lr{}_eps{}_steps{}_{}_{}.png".format(mini_batch_size, lr, epsilon, total_iters, text_loss_type, text_target))
+    fig.savefig("{}_loss_vs_iterations_batch{}_lr{}_eps{}_steps{}_{}_{}.png".format(text_q, mini_batch_size, lr, epsilon, total_iters, text_loss_type, text_target))
 
     # fig, ax = plt.subplots()
     # if not(use_online_learning):
@@ -485,6 +484,6 @@ if __name__ == "__main__":
     # fig.savefig("loss_vs_iterations_batch{}_lr{}_eps{}_steps{}.png".format(mini_batch_size, lr, epsilon, total_iters))
 
     # Save Numpy 
-    np.save('losses_{}_batch{}_lr{}_eps{}_steps{}.npy'.format(text_loss_type, mini_batch_size, lr, epsilon, total_iters), losses)
+    np.save('{}_losses_{}_batch{}_lr{}_eps{}_steps{}.npy'.format(text_q, text_loss_type, mini_batch_size, lr, epsilon, total_iters), losses)
 
     print(("File saved as " + "loss_vs_iterations_{}_batch{}_lr{}_eps{}_steps{}.png".format(text_loss_type, mini_batch_size, lr, epsilon, total_iters)))
