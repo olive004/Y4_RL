@@ -301,6 +301,7 @@ class Network(torch.nn.Module):
         layer_1_output = torch.nn.functional.relu(self.layer_1(input))
         layer_2_output = torch.nn.functional.relu(self.layer_2(layer_1_output))
         output = self.output_layer(layer_2_output)
+        output = torch.relu(output)
         return output
 
 
@@ -326,14 +327,14 @@ class DQN:
         # HPs
         self.discount = 0.95
         self.discount_vector = torch.tensor([self.discount ** i for i in range(mini_batch_size)])
-        self.lr = 0.001
+        self.lr = 0.0001
         self.tau = 0.4
 
         # Memory
         self.use_penalisation = True
         self.use_prioritisation = False
         self.use_importance_sampling = False
-        maxlen = 20000
+        maxlen = 10000
         self.Buffer = ReplayBuffer(mini_batch_size, maxlen, self.use_prioritisation, self.use_penalisation, self.use_importance_sampling)
 
         # Technical
