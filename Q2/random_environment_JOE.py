@@ -15,9 +15,11 @@ import cv2
 class Environment:
 
     # Function to initialise an Environment object
-    def __init__(self,  magnification):
+    def __init__(self,  magnification, trace=True, difficulty=1.0):
+        self.difficulty = difficulty
         # Set the magnification factor of the display
         self.magnification = magnification
+        self.trace = trace
         # Set the width and height of the environment
         self.width = 1.0
         self.height = 1.0
@@ -37,13 +39,14 @@ class Environment:
         init_state_x = 0.05
         init_state_y = np.random.uniform(0.05, 0.95)
         self.init_state = np.array([init_state_x, init_state_y], dtype=np.float32)
+        self.state_trace = [self.init_state]
         # Create an empty list of free blocks
         self.free_blocks = []
         # Create the first free space block
-        block_bottom = init_state_y - np.random.uniform(0.1, 0.2)
-        block_top = init_state_y + np.random.uniform(0.1, 0.2)
-        block_left = 0.02
-        block_right = block_left + np.random.uniform(0.03, 0.1)
+        block_bottom = init_state_y - np.random.uniform(0.1*self.difficulty, 0.2*self.difficulty)
+        block_top = init_state_y + np.random.uniform(0.1*self.difficulty, 0.2*self.difficulty)
+        block_left = 0.02 * self.difficulty
+        block_right = block_left + np.random.uniform(0.03*self.difficulty, 0.1*self.difficulty)
         top_left = (block_left, block_top)
         bottom_right = (block_right, block_bottom)
         block = (top_left, bottom_right)
@@ -55,9 +58,9 @@ class Environment:
         while prev_right < 0.8:
             is_within_boundary = False
             while not is_within_boundary:
-                block_height = np.random.uniform(0.05, 0.4)
-                block_bottom_max = prev_top - 0.05
-                block_bottom_min = prev_bottom - (block_height - 0.05)
+                block_height = np.random.uniform(0.05 * self.difficulty, 0.4 * self.difficulty)
+                block_bottom_max = prev_top - 0.05 * self.difficulty
+                block_bottom_min = prev_bottom - (block_height - 0.05 * self.difficulty)
                 block_bottom_mid = 0.5 * (block_bottom_min + block_bottom_max)
                 block_bottom_half_range = block_bottom_max - block_bottom_mid
                 r1 = np.random.uniform(-block_bottom_half_range, block_bottom_half_range)
@@ -68,7 +71,7 @@ class Environment:
                     block_bottom = block_bottom_mid + r2
                 block_top = block_bottom + block_height
                 block_left = prev_right
-                block_width = np.random.uniform(0.03, 0.1)
+                block_width = np.random.uniform(0.03 * self.difficulty, 0.1 * self.difficulty)
                 block_right = block_left + block_width
                 top_left = (block_left, block_top)
                 bottom_right = (block_right, block_bottom)
@@ -82,9 +85,9 @@ class Environment:
             prev_bottom = block_bottom
             prev_right = block_right
         # Add the final free space block
-        block_height = np.random.uniform(0.05, 0.15)
-        block_bottom_max = prev_top - 0.05
-        block_bottom_min = prev_bottom - (block_height - 0.05)
+        block_height = np.random.uniform(0.05 * self.difficulty, 0.15 * self.difficulty)
+        block_bottom_max = prev_top - 0.05 * self.difficulty
+        block_bottom_min = prev_bottom - (block_height - 0.05 * self.difficulty)
         block_bottom = np.random.uniform(block_bottom_min, block_bottom_max)
         block_top = block_bottom + block_height
         block_left = prev_right
@@ -98,6 +101,7 @@ class Environment:
 
     # Function to reset the environment, which is done at the start of each episode
     def reset(self):
+        self.state_trace = [self.init_state]
         return self.init_state
 
     # Function to execute an agent's step within this environment, returning the next state and the distance to the goal
@@ -120,6 +124,8 @@ class Environment:
             if not is_agent_in_free_space:
                 next_state = state
         # Compute the distance to the goal
+        if self.trace:
+            self.state_trace.append(next_state)
         distance_to_goal = np.linalg.norm(next_state - self.goal_state)
         # Return the next state and the distance to the goal
         return next_state, distance_to_goal
@@ -170,3 +176,6 @@ class Environment:
         cv2.imshow("Environment", self.image)
         # This line is necessary to give time for the image to be rendered on the screen
         cv2.waitKey(1)
+
+def to_img_crds(coord, mag):
+    return tuple([int(coord[0] * mag), int((1-coord[1]) * mag)])

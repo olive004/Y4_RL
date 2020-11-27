@@ -1,7 +1,8 @@
 import time
 import numpy as np
+import torch
 
-from random_environment_test import Environment
+from random_environment_JOE import Environment
 from agent import Agent
 
 
@@ -16,8 +17,11 @@ if __name__ == "__main__":
     random_seed = int(time.time())
     np.random.seed(random_seed)
 
+    np.random.seed(4)  # 1606064318
+    torch.manual_seed(0)
+
     # Create a random environment
-    environment = Environment(magnification=500)
+    environment = Environment(magnification=500, difficulty=2)
 
     # Create an agent
     agent = Agent()
@@ -40,7 +44,8 @@ if __name__ == "__main__":
             all_states = []  # TODO DELETE
             
             print('Time elapsed in episode: {}'.format(time.time() - episode_time))
-            print('Total time elapsed: {}'.format(episode_time - start_time))
+            total_time = episode_time - start_time
+            print('Total time elapsed: {}'.format(total_time))
             episode_time = time.time()
             episode_count += 1
         all_states.append(state)  # TODO DELETE
@@ -53,12 +58,13 @@ if __name__ == "__main__":
         # Set what the new state is
         state = next_state
         # Optionally, show the environment
-        if display_on:
+        if display_on and total_time > 40:
             environment.show(state, all_states)
 
     # Test the agent for 100 steps, using its greedy policy
     state = environment.init_state
     has_reached_goal = False
+    all_states = []
     for step_num in range(100):
         action = agent.get_greedy_action(state)
         next_state, distance_to_goal = environment.step(state, action)
@@ -66,6 +72,8 @@ if __name__ == "__main__":
         if distance_to_goal < 0.03:
             has_reached_goal = True
             break
+        all_states.append(state)
+        environment.show(state, all_states)
         state = next_state
 
     # Print out the result
