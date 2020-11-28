@@ -25,9 +25,26 @@ from matplotlib import pyplot as plt
 class Agent:
 
     # Function to initialise the agent
-    def __init__(self):
+    def __init__(self, 
+        buffer_alpha_dec = 0.999,
+        discount=0.9,
+        eps_dec_factor=0.999,
+        lr=1e-4,
+        min_eps=0.15,
+        N_update_target=10,
+        mini_batch_size=150,
+        reward_type='linear',
+        stop_at_min_eps=True,
+        tau=1e-3,
+        torch_seed=0,
+        use_double_q='values',
+        use_penalisation=True,
+        use_prioritisation=True,
+        use_softupdate=True
+    ):
+
         # Set the episode length
-        self.episode_length = 250
+        self.episode_length = 275
         # Reset the total number of steps which the agent has taken
         self.num_steps_taken = 0
         # The state variable stores the latest state of the agent in the environment
@@ -36,7 +53,7 @@ class Agent:
         self.action = None
 
         # Movement
-        self.step_size = 0.01
+        self.step_size = 0.02
         self.disc_actions = [0, 1, 2, 3]
         self.cont_actions = self.step_size * np.array([
             [0.0, 1.0],  # North
@@ -46,31 +63,33 @@ class Agent:
         ], dtype=np.float32)
 
         self.disc_states_vector = np.array(np.arange(0, 1, self.step_size), dtype=np.float32)
-        self.q_values = np.zeros((len(self.disc_states_vector), len(self.disc_states_vector )))
-        self.v_values = np.zeros((len(self.disc_states_vector), len(self.disc_states_vector )))
+        self.q_values = np.zeros((len(self.disc_states_vector), len(self.disc_states_vector)))
+        self.v1_values = np.zeros((len(self.disc_states_vector), len(self.disc_states_vector)))
+        self.v2_values = np.zeros((len(self.disc_states_vector), len(self.disc_states_vector)))
 
         # Eploration
-        self.epsilon = 1
+        self.epsilon = 1.0
         self.decay_epsilon = True
-        self.stop_at_min_eps = True
-        self.eps_dec_factor = 0.999
-        self.min_eps = 0.15
+        self.stop_at_min_eps = stop_at_min_eps
+        self.eps_dec_factor = eps_dec_factor
+        self.min_eps = min_eps
 
         # Strategy
-        self.N_update_target = 15
-        self.use_softupdate = True
-        self.reward_type = 'linear'  # 'exponential'  # 
+        self.N_update_target = N_update_target
+        self.use_softupdate = use_softupdate
+        self.reward_type = reward_type  # 'linear'  # 'exponential'  # 
 
         self.use_online_learning = False
-        self.mini_batch_size = 1 if self.use_online_learning else 64
+        self.mini_batch_size = mini_batch_size
 
         # Network
-        self.dqn = DQN(self.mini_batch_size) 
+        self.dqn = DQN(buffer_alpha_dec, discount, lr, mini_batch_size, tau, torch_seed, use_double_q, use_penalisation, use_prioritisation) 
 
         # Logging
         self.random_action_taken = []
         self.text_eps = 'Epsilon decaying' if self.decay_epsilon else ''
         self.text_target = self.dqn.use_double_q
+        self.per_text = '_per{}'.format(str(self.dqn.Buffer.alpha_decay)) if use_prioritisation else ''
 
     # Function to check whether the agent has reached the end of an episode
     def has_finished_episode(self):
@@ -141,7 +160,7 @@ class Agent:
         if self.reward_type == 'linear':
             return reward
         if self.reward_type == 'exponential':
-            if distance_to_goal < 0.2:
+            if distance_to_goal < 0.1:
                 reward *= 1.5
             elif distance_to_goal < 0.4:
                 reward *= 1.3
@@ -173,11 +192,13 @@ class Agent:
             action_percs = []
             total_rand = len(self.random_action_taken)
             for act in self.disc_actions:
-                action_percs.append((act, (self.random_action_taken.count(act))/self.num_steps_taken))
-        print('Random actions were taken {} perc. of the time: {}'.format(round(total_rand/self.num_steps_taken, 4), action_percs))
+                action_percs.append((act, (self.random_action_taken.count(act))/self.episode_length))
+        print('Random actions were taken {} perc. of the time: {}'.format(round(total_rand/self.episode_length, 4), action_percs))
         self.dqn.losses.append(self.dqn.last_loss)
         self.log_loss()
         self.log_q_values()
+
+        self.random_action_taken = []
 
     def log_loss(self):
         # Plot and save the loss vs iterations graph
@@ -185,34 +206,45 @@ class Agent:
         iterations = np.arange(0, len(self.dqn.losses))
         self.dqn.losses = [i if i is not None else 0 for i in self.dqn.losses]  # Remove 'None's
 
+        print("Loss: {}".format(self.dqn.losses[-1]))
+        if self.dqn.use_prioritisation:
+            print("Buffer Alpha: {}".format(self.dqn.Buffer.alpha))
+
         fig, ax = plt.subplots()
         ax.set(xlabel='Iteration', ylabel='Loss', title=('Loss Curve, Batch_size={} '+self.text_eps).format(self.mini_batch_size))
         ax.plot(iterations, self.dqn.losses, color='blue')
         plt.text((0.8*len(iterations)), (0.8*np.max(self.dqn.losses)), 'std={}'.format(variance))
         plt.yscale('log')
-        fig.savefig("Q2/loss__bs{}_lr{}_disc{}_epdec{}_epsteps{}_tau{}_N{}_{}.png".format(self.mini_batch_size, self.dqn.lr, self.dqn.discount, self.eps_dec_factor, self.episode_length, self.dqn.tau, self.N_update_target, self.text_target))
+        fig.savefig("Q2/loss__bs{}_lr{}_disc{}_epdec{}_epsteps{}_tau{}_N{}_{}{}.png".format(self.mini_batch_size, self.dqn.lr, self.dqn.discount, self.eps_dec_factor, self.episode_length, self.dqn.tau, self.N_update_target, self.text_target, self.per_text))
 
     def log_q_values(self):
-        
+
         for i, sx in enumerate(self.disc_states_vector):
             for j, sy in enumerate(self.disc_states_vector):
                 prediction = self.dqn.q_network.forward(torch.tensor([sx, sy])).detach().numpy()
                 self.q_values[i, j] = np.max(prediction)
-                # self.v_values[i, j] = np.mean(prediction)
+                self.v1_values[i, j] = np.min(prediction)
+                self.v2_values[i, j] = np.mean(prediction)
         fig, ax = plt.subplots()
         im = ax.imshow(np.flip(self.q_values, axis=0))
+        ax.set_title('Max Q values')
         fig.colorbar(im)
-        fig.savefig("Q2/QValues__bs{}_lr{}_disc{}_epdec{}_epsteps{}_tau{}_N{}_{}.png".format(self.mini_batch_size, self.dqn.lr, self.dqn.discount, self.eps_dec_factor, self.episode_length, self.dqn.tau, self.N_update_target, self.text_target))
+        fig.savefig("Q2/QValues__bs{}_lr{}_disc{}_epdec{}_epsteps{}_tau{}_N{}_{}{}.png".format(self.mini_batch_size, self.dqn.lr, self.dqn.discount, self.eps_dec_factor, self.episode_length, self.dqn.tau, self.N_update_target, self.text_target, self.per_text))
 
-        # fig, ax = plt.subplots()
-        # im = ax.imshow(np.flip(self.v_values, axis=0))
-        # fig.colorbar(im)
-        # fig.savefig("Q2/VValues__bs{}_lr{}_disc{}_epdec{}_epsteps{}_tau{}_N{}_{}.png".format(self.mini_batch_size, self.dqn.lr, self.dqn.discount, self.eps_dec_factor, self.episode_length, self.dqn.tau, self.N_update_target, self.text_target))
+        fig, (ax1, ax2) = plt.subplots(1, 2, sharey=True)
+        vmin=np.min((self.v1_values, self.v2_values))
+        vmax=np.max((self.v1_values, self.v2_values))
+        im = ax1.imshow(np.flip(self.v1_values, axis=0), vmin=vmin, vmax=vmax)
+        im = ax2.imshow(np.flip(self.v2_values, axis=0), vmin=vmin, vmax=vmax)
+        ax1.set_title('Min Q values')
+        ax2.set_title('Mean Q values')
+        fig.colorbar(im, ax=[ax1, ax2])
+        fig.savefig("Q2/VValues__bs{}_lr{}_disc{}_epdec{}_epsteps{}_tau{}_N{}_{}{}.png".format(self.mini_batch_size, self.dqn.lr, self.dqn.discount, self.eps_dec_factor, self.episode_length, self.dqn.tau, self.N_update_target, self.text_target, self.per_text))
 
 
 class ReplayBuffer:
 
-    def __init__(self, sample_size=100, maxlen=5000, use_prioritisation=True, use_penalisation=True, use_importance_sampling=True, use_online_learning=False):
+    def __init__(self, buffer_alpha_dec=0.999, sample_size=100, maxlen=5000, use_prioritisation=True, use_penalisation=True, use_importance_sampling=True, use_online_learning=False):
         self.buffer = deque(maxlen=maxlen)
         self.sample_size = sample_size
         self.use_online_learning = use_online_learning
@@ -220,9 +252,10 @@ class ReplayBuffer:
         self.use_importance_sampling = use_importance_sampling
         if use_prioritisation:
             self.buffer_probs = deque(maxlen=maxlen)
-            self.default_prob = 0.01
+            self.default_prob = 0.03
+            self.min_prob = 0.0001
             self.alpha = 1
-            self.alpha_decay = 0.99
+            self.alpha_decay = buffer_alpha_dec
             self.recent_idxs = []
         if use_importance_sampling:
             self.beta = 0.4
@@ -235,10 +268,13 @@ class ReplayBuffer:
         else:
             return False
 
-    def update_priority(self, weights):
+    def update_priority(self, weights, sub_idxs=None):
         weights = weights if (np.size(weights)>1) else [weights]
+        if sub_idxs is not None:
+            self.recent_idxs = sub_idxs[sub_idxs]
+            weights = weights[sub_idxs]
         for i, w in zip(self.recent_idxs, weights):
-            self.buffer_probs[i] = self.default_prob + np.abs(w)
+            self.buffer_probs[i] = self.min_prob + np.abs(w)
 
     def sample(self, sample_size=20):
 
@@ -301,7 +337,6 @@ class Network(torch.nn.Module):
         layer_1_output = torch.nn.functional.relu(self.layer_1(input))
         layer_2_output = torch.nn.functional.relu(self.layer_2(layer_1_output))
         output = self.output_layer(layer_2_output)
-        output = torch.relu(output)
         return output
 
 
@@ -313,7 +348,9 @@ class DuelingNetwork(torch.nn.Module):
 
 class DQN:
 
-    def __init__(self, mini_batch_size):
+    def __init__(self, buffer_alpha_dec, discount, lr, mini_batch_size, tau, torch_seed, use_double_q, use_penalisation, use_prioritisation): 
+        torch.manual_seed(torch_seed)
+
         # Architecture
         self.q_network = Network(input_dimension=2, output_dimension=4)
         self.t_network = copy.deepcopy(self.q_network)
@@ -321,21 +358,21 @@ class DQN:
         
         # Strategies
         self.use_nstep_discount = False
-        self.use_double_q = 'values'  # 'target': classic target network | 'action': Use Q net for Q values, T net for action | 'values': Use T net for Q values, Q net for action
+        self.use_double_q = use_double_q  # 'target': classic target network | 'action': Use Q net for Q values, T net for action | 'values': Use T net for Q values, Q net for action
         self.loss_type = 'bellman'
 
         # HPs
-        self.discount = 0.95
+        self.discount = discount
         self.discount_vector = torch.tensor([self.discount ** i for i in range(mini_batch_size)])
-        self.lr = 0.0001
-        self.tau = 0.4
+        self.lr = lr
+        self.tau = tau
 
         # Memory
-        self.use_penalisation = True
-        self.use_prioritisation = False
+        self.use_penalisation = use_penalisation
+        self.use_prioritisation = use_prioritisation
         self.use_importance_sampling = False
         maxlen = 10000
-        self.Buffer = ReplayBuffer(mini_batch_size, maxlen, self.use_prioritisation, self.use_penalisation, self.use_importance_sampling)
+        self.Buffer = ReplayBuffer(buffer_alpha_dec, mini_batch_size, maxlen, self.use_prioritisation, self.use_penalisation, self.use_importance_sampling)
 
         # Technical
         self.optimiser = torch.optim.Adam(self.q_network.parameters(), lr=self.lr)
@@ -400,18 +437,20 @@ class DQN:
         # --> G = R + γ * max_a [ Q(S', a) ]
         prediction_reward = reward + discount * torch.squeeze(predicted_action_)
 
-        # Buffer update
-        if self.use_prioritisation:
-            buffer_idxs = self.Buffer.recent_idxs[(prediction_reward > torch.mean(
-                prediction_reward, axis=0) + torch.std(prediction_reward, axis=0)).squeeze()]
-            buffer_weights = ((torch.squeeze(prediction_reward) - torch.squeeze(predicted_action)) ** 2).detach().numpy()
-            self.Buffer.update_priority(weights=buffer_weights)
-
         if self.loss_type == 'bellman':
             # --> θ = θ - α * (1/N) * sum[ G - Q(S, A) ]^2
-            loss = self.loss_criterion(torch.squeeze(prediction_reward), torch.squeeze(predicted_action))
+            # loss = self.loss_criterion(torch.squeeze(prediction_reward), torch.squeeze(predicted_action))
+            w = ((torch.squeeze(prediction_reward) - torch.squeeze(predicted_action)) ** 2)
+            loss = torch.mean(w)
         else:
             loss = self.loss_criterion(reward, predicted_action)
+
+        # Buffer update
+        if self.use_prioritisation:
+            # buffer_idxs = (reward > torch.mean(
+                # reward, axis=0) + torch.std(reward, axis=0)).squeeze()
+            # buffer_weights = w.detach().numpy()
+            self.Buffer.update_priority(weights=np.array(reward))  #, sub_idxs=buffer_idxs)
         return loss
 
 
@@ -430,47 +469,6 @@ def main():
         'replay buffer max': 5000,
         'minibatch': 100
     }
-
-
-    # AGENT
-    # Movement
-    self.step_size = 0.01
-    self.disc_actions = [0, 1, 2, 3]
-    self.cont_actions = self.step_size * np.array([
-        [0.0, 1.0],  # North
-        [1.0, 0.0],  # East
-        [0.0, -1.0],  # South
-        [-1.0, 0.0],  # West
-    ], dtype=np.float32)
-
-    self.disc_states_vector = np.array(np.arange(0, 1, self.step_size), dtype=np.float32)
-    self.q_values = np.zeros((len(self.disc_states_vector), len(self.disc_states_vector )))
-
-    # Eploration
-    self.epsilon = 1
-    self.decay_epsilon = True
-    self.eps_dec_factor = 0.995
-
-    # Strategy
-    self.N_update_target = 30
-    self.reward_type = 'linear'  # 'exponential'  # 
-    self.use_penalisation = False
-
-    # Memory
-    self.use_prioritisation = True
-    self.Buffer = ReplayBuffer(self.use_prioritisation, self.use_penalisation)
-    self.mini_batch_size = 1 if self.use_online_learning else 100
-    
-    # NETWORK
-    # Strategies
-    self.use_nstep_discount = False
-    self.use_double_q = 'action'  # 'target': classic target network | 'action': Use Q net for Q values, T net for action | 'values': Use T net for Q values, Q net for action
-
-    # HPs
-    self.discount = 0.9
-    self.lr = 0.0002
-
-
 
     # ep 98, bs 42, epdec 0.9, gamma 0.12884, action 4, ddqn, alpha 0.11, prioritised her, softmax exploration, 
 # masturbation 

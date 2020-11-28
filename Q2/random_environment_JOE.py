@@ -131,7 +131,8 @@ class Environment:
         return next_state, distance_to_goal
 
     # Function to draw the environment and display it on the screen, if required
-    def show(self, agent_state, all_states=None):
+    def show(self, agent_state, all_states=None, save_im='close'):
+        self.save_im = save_im
         # Create the background / obstacle
         window_top_left = (0, 0)
         window_bottom_right = (self.magnification * 1, self.magnification * 1)
