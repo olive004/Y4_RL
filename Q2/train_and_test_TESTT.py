@@ -2,7 +2,7 @@ import time
 import numpy as np
 import torch
 
-from random_environment_JOE import Environment
+from random_environment_test import Environment
 from agent import Agent
 
 import optuna
@@ -71,10 +71,11 @@ if __name__ == "__main__":
     random_seed = int(time.time())
     np.random.seed(random_seed)
 
-    np.random.seed(3)  # 1606064318
+    np.random.seed(0)  # 1606064318  # goodbye 3
 
     # Create a random environment
-    environment = Environment(magnification=500, difficulty=3)
+    # environment = Environment(magnification=500, difficulty=2)
+    environment = Environment(magnification=500)
 
     # Create an agent
     # kwargs = sample_dqn_params(trial)
@@ -113,7 +114,7 @@ if __name__ == "__main__":
         state = next_state
         # Optionally, show the environment
         if display_on and total_time > 0:
-            environment.show(state, all_states)
+            environment.show(state, all_states, 'every')
 
     # Test the agent for 100 steps, using its greedy policy
     state = environment.init_state

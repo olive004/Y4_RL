@@ -125,7 +125,8 @@ class Environment:
         return next_state, distance_to_goal
 
     # Function to draw the environment and display it on the screen, if required
-    def show(self, agent_state, all_states=None):
+    def show(self, agent_state, all_states=None, save_im='close'):
+        self.save_im = save_im
         # Create the background / obstacle
         window_top_left = (0, 0)
         window_bottom_right = (self.magnification * 1, self.magnification * 1)
@@ -159,8 +160,8 @@ class Environment:
                 distance_to_goal = np.min((np.linalg.norm(state - self.goal_state), distance_to_goal))
         cv2.putText(self.image, str((round(agent_state[0], 3), round((1 - agent_state[1]), 3))), agent_centre, cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 0, 0), 1)
         if self.save_im == 'every':
-            filename ='Q2/random_env_policy_path.png'
-            cv2.imwrite(filename, self.image)
+            qfilename ='Q2/random_env_policy_path.png'
+            cv2.imwrite(qfilename, self.image)
         elif self.save_im == 'close':
             if distance_to_goal < 0.3:
                 filename ='Q2/random_env_policy_path.png'
