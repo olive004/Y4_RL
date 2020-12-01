@@ -147,7 +147,7 @@ class Environment:
         goal_colour = (200, 50, 50)
         cv2.circle(self.image, goal_centre, goal_radius, goal_colour, cv2.FILLED)
         # Draw optimal policy line  # TODO Delete /*
-        if all_states:
+        if np.any(all_states):
             distance_to_goal = 10
             for i, state_ in enumerate(all_states):
                 if i==0:

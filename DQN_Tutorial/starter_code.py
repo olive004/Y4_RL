@@ -360,12 +360,12 @@ if __name__ == "__main__":
 
     # # Q 1.3:
     # # 1.3a) 
-    # use_rand_actions, use_online_learning, total_iters, use_target, lr, N_update_target, use_bellman_loss, epsilon, text_q = (True, False, 100, False, 0.001, 10, True, 0, 'q13a')
+    # use_rand_actions, use_online_learning, total_iters, use_target, lr, N_update_target, use_bellman_loss, epsilon, text_q = (True, False, 100, False, 0.0001, 10, True, 0, 'q13a')
     # # 1.3b)
-    # use_rand_actions, use_online_learning, total_iters, use_target, lr, N_update_target, use_bellman_loss, epsilon, text_q = (True, False, 100, True, 0.001, 10, True, 0, 'q13b')
+    use_rand_actions, use_online_learning, total_iters, use_target, lr, N_update_target, use_bellman_loss, epsilon, text_q = (True, False, 100, True, 0.00005, 10, True, 0, 'q13b')
 
     # # Q 1.4
-    use_rand_actions, use_online_learning, total_iters, use_target, lr, N_update_target, use_bellman_loss, epsilon, text_q = (False, False, 600, True, 0.002, 10, True, 1, 'q14')
+    # use_rand_actions, use_online_learning, total_iters, use_target, lr, N_update_target, use_bellman_loss, epsilon, text_q = (False, False, 600, True, 0.002, 10, True, 1, 'q14')
     
     mini_batch_size = 1 if use_online_learning else 100
     text_target = 'tnet' if use_target else 'qnet'
@@ -468,7 +468,7 @@ if __name__ == "__main__":
     variance = np.std(losses)
     ax.set(xlabel='Iteration', ylabel='Loss', title=('Loss Curve, Batch_size={} '+text_eps).format(mini_batch_size))
     ax.plot(iterations, losses, color='blue')
-    plt.text(0.7*np.max(iterations), 0.6*np.max(losses), 'std={}'.format(round(variance, 5)))
+    plt.text(0.7*np.max(iterations), 0.6*np.max(losses), 'std={:e}'.format(variance))
     plt.yscale('log')
     # plt.show()
     fig.savefig("{}_loss_vs_iterations_batch{}_lr{}_eps{}_steps{}_{}_{}.png".format(text_q, mini_batch_size, lr, epsilon, total_iters, text_loss_type, text_target))

@@ -26,15 +26,16 @@ class Agent:
 
     # Function to initialise the agent
     def __init__(self, 
-        buffer_alpha_dec = 1,  # set prob to 0.1 if 
+        buffer_alpha_dec = 0,  # set prob to 0.1 if 
         eta = 0.1,
-        discount=0.9,
+        eval_mode=False,
+        discount=0.94,
         episode_length=350,  # reduce during training
-        eps_dec_factor=(1-1.5e-05),
-        lr=1e-2,
+        eps_dec_factor=(1-(2e-05)),
+        lr=2e-03,
         min_eps=0.15,
-        mini_batch_size=200, 
-        N_update_target=250,  # 50 
+        mini_batch_size=220, 
+        N_update_target=50,
         network_type = 'dueling',
         num_random_epochs = 2,
         reward_type='exponential',
@@ -42,7 +43,7 @@ class Agent:
         stop_at_min_eps=True,
         tau=1,  # 1e-3,
         torch_seed=1,
-        use_alt_epsilon=True,
+        use_alt_epsilon=False,
         use_curiosity=0,    # can be 0, 1 or else
         use_diagonal_actions = False,
         use_double_q='values',
@@ -51,7 +52,7 @@ class Agent:
         use_prioritisation=False,
         use_softupdate=False
     ):
-
+        self.eval_mode = eval_mode
         # Set the episode length
         self.episode_length = episode_length
         # Reset the total number of steps which the agent has taken
@@ -96,13 +97,13 @@ class Agent:
         self.use_curiosity = use_curiosity
         self.eta = eta
         self.num_random_epochs = num_random_epochs
+        self.use_alt_epsilon = use_alt_epsilon
 
         # Strategy
         self.N_update_target = N_update_target
         self.use_softupdate = use_softupdate
         self.reward_type = reward_type  # 'linear'  # 'exponential'  # 
         self.reduce_episodes = reduce_episodes
-        self.goal_reached = False
 
         self.use_online_learning = False
         self.mini_batch_size = mini_batch_size
@@ -112,6 +113,7 @@ class Agent:
 
         # Logging
         self.episode_count = 0
+        self.visualise = False
         self.random_action_taken = []
         self.text_eps = 'Epsilon decaying' if self.decay_epsilon else ''
         self.text_target = self.dqn.use_double_q
@@ -126,15 +128,9 @@ class Agent:
     # Function to check whether the agent has reached the end of an episode
     def has_finished_episode(self):
         if self.num_steps_taken % self.episode_length == 0:
-            self.log()
-            if self.goal_reached:
-                self.mini_batch_size = np.max((int(self.mini_batch_size * 0.75), 100))
-                self.goal_reached = False
-
-            if self.reduce_episodes and (self.episode_count % 10 == 0) and (self.num_steps_taken > 5000):
-                self.episode_length = np.max((int(self.episode_length-25), 100))
-
-            self.epsilon = np.min((1, self.epsilon + (1-self.eps_dec_factor)*(self.episode_length/4)))
+            if self.eval_mode and self.visualise:
+                self.log()
+            # self.epsilon = np.min((1, self.epsilon + (1-self.eps_dec_factor)*(self.episode_length/4)))
 
             self.episode_count +=1 
             return True
@@ -143,19 +139,24 @@ class Agent:
 
     # Function to get the next action, using whatever method you like
     def get_next_action(self, state):
+        if self.reduce_episodes and (self.episode_count % 10 == 0) and (self.episode_count > 80):
+            self.episode_length = int(np.max((100, self.episode_length-25)))
+
         # Here, the action is random, but you can change this
-        rand = np.random.rand()
+        rand = np.random.uniform(low=0, high=1)
         # epsilon = self.alt_epsilon if self.dqn.Buffer.use_alt_epsilon else self.epsilon
-        if self.dqn.Buffer.use_alt_epsilon:
-            epsilon = self.alt_epsilon
-            self.epsilon = np.min((1, (self.epsilon + (1-self.eps_dec_factor))))
+        if self.use_alt_epsilon:
+            if self.dqn.Buffer.use_alt_epsilon:
+                epsilon = self.alt_epsilon
+                self.epsilon = np.min((1, (self.epsilon + (1-self.eps_dec_factor))))
         else:
             epsilon = self.epsilon
         if not(self.random_is_enough()) or (rand < epsilon):
             # predicted_rewards = np.random.uniform(low=0, high=1, size=4).astype(np.float32)
             # action = np.argmax(predicted_rewards)
             action = np.random.choice(self.disc_actions)
-            self.random_action_taken.append(action)
+            if self.visualise:
+                self.random_action_taken.append(action)
         else:
             predicted_rewards = self.dqn.q_network.forward(torch.tensor(self.state).type(torch.float32))
             action = np.argmax(predicted_rewards.detach().numpy())
@@ -188,8 +189,6 @@ class Agent:
     # Function to set the next state and distance, which resulted from applying action self.action at state self.state
     def set_next_state_and_distance(self, next_state, distance_to_goal):
         # Convert the distance to a reward
-        if self.reduce_episodes and (distance_to_goal<0.03):
-            self.goal_reached = True
 
         reward = self.get_reward(distance_to_goal)
         
@@ -197,10 +196,11 @@ class Agent:
         transition = (self.state, self.action, reward, next_state)
         # Now you can do something with this transition ...
         self.dqn.Buffer.append(transition)
-        if np.all(self.state == next_state):
-            self.dqn.Buffer.use_alt_epsilon = True
-        else:
-            self.dqn.Buffer.use_alt_epsilon = False
+        if self.use_alt_epsilon:
+            if np.all(self.state == next_state):
+                self.dqn.Buffer.use_alt_epsilon = True
+            else:
+                self.dqn.Buffer.use_alt_epsilon = False
         
         if self.random_is_enough():
             mini_batch = self.dqn.Buffer.sample(sample_size=self.mini_batch_size)
@@ -230,9 +230,9 @@ class Agent:
             return reward
         if self.reward_type == 'exponential':
             if distance_to_goal < 0.25:
-                reward *= 3
+                reward *= 3.5
             elif distance_to_goal < 0.5:
-                reward *= 2
+                reward *= 2.5
             elif distance_to_goal < 0.75:
                 reward *= 1.5
         return reward
@@ -241,6 +241,8 @@ class Agent:
     def get_greedy_action(self, state):
         # Here, the greedy action is fixed, but you should change it so that it returns the action with the highest Q-value
         # action = np.array([0.02, 0.0], dtype=np.float32)
+        self.eval_mode = True
+        self.log()
         prediction = self.dqn.q_network.forward(torch.tensor(state)).detach()
         action = int(np.argmax(prediction.detach().numpy()))
         action = self._discrete_action_to_continuous(action)
@@ -251,10 +253,13 @@ class Agent:
         self.epsilon = self.epsilon * self.eps_dec_factor
 
     def log(self):
+        if self.eval_mode:
+            self.log_q_values()
+
         if not(self.random_is_enough()):
             return
 
-        if not self.random_action_taken:
+        if not(self.random_action_taken):
             action_percs = 0
             total_rand = 0
         else:
@@ -329,8 +334,8 @@ class ReplayBuffer:
             self.buffer_probs = deque(maxlen=maxlen)
             self.default_prob = 0.01
             self.min_prob = 0.0001
-            self.alpha = 1
             self.alpha_decay = buffer_alpha_dec
+            self.alpha = 1 if buffer_alpha_dec else 0
             self.recent_idxs = []
         if use_importance_sampling:
             self.beta = 0.4
@@ -345,10 +350,11 @@ class ReplayBuffer:
     def update_priority(self, weights, sub_idxs=None):
         weights = weights if (np.size(weights)>1) else [weights]
         for i, w in zip(self.recent_idxs, weights):
-            self.buffer_probs[i] = self.min_prob + np.abs(w)
-        if sub_idxs is not None:
-            for sub_i in self.recent_idxs[sub_idxs]:
-                self.buffer_probs[i] = self.default_prob
+            # self.buffer_probs[i] = self.min_prob + np.abs(w)
+            self.buffer_probs[i] = self.default_prob
+        # if sub_idxs is not None:
+        #     for sub_i in self.recent_idxs[sub_idxs]:
+        #         self.buffer_probs[i] = self.default_prob
 
     def sample(self, sample_size=20):
 
@@ -368,7 +374,7 @@ class ReplayBuffer:
                 else:
                     buffer_probs = np.array(self.buffer_probs)
                 buffer_probs =  buffer_probs / np.sum(buffer_probs)
-                random_indices = np.random.choice(list(range(buffer_size)), size=sample_size, replace=False, p=buffer_probs)
+                random_indices = np.random.choice(np.arange(buffer_size), size=sample_size, replace=False, p=buffer_probs)
 
                 self.alpha *= self.alpha_decay
         else:
@@ -385,7 +391,7 @@ class ReplayBuffer:
             state, act, rew, next_state = self.buffer[idx]
             if self.use_penalisation and np.all(state == next_state):
                 # rew = rew - 0.02
-                rew = rew / 1.5
+                rew = rew / 1.4
             all_s.append(state)
             all_a.append(act)
             all_r.append(rew)
@@ -609,10 +615,7 @@ class DQN:
         if self.use_curiosity:
             forward_pred_err, inverse_pred_err = self.ICM.calc_errors(state1=state, state2=state_, action=action)
             r_i = self.eta * forward_pred_err
-            if self.use_curiosity == 1:
-                reward += r_i.detach()
-            else:
-                reward = r_i.detach()
+            reward += r_i.detach()
             self.icm_loss = self.ICM.update_ICM(forward_pred_err, inverse_pred_err)
 
         # Forward
@@ -623,10 +626,10 @@ class DQN:
         q_prediction_ = self.q_network.forward(state_).detach()
         if self.use_double_q == 'action':
             max_action = torch.unsqueeze(torch.argmax(prediction_, -1), 1)
-            predicted_action_ = torch.gather(q_prediction_, -1, max_action)
+            predicted_action_ = torch.gather(q_prediction_, -1, max_action).detach()
         elif self.use_double_q == 'values':
             max_action = torch.unsqueeze(torch.argmax(q_prediction_, -1), 1)
-            predicted_action_ = torch.gather(prediction_, -1, max_action)
+            predicted_action_ = torch.gather(prediction_, -1, max_action).detach()
         else:
             # Q(S,A)
             predicted_action_ = prediction_.max(1)[0].detach()  #.numpy()
